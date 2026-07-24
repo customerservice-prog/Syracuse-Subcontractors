@@ -37,7 +37,7 @@
     "@types/node": "20.14.15",
     "@types/react": "18.3.3",
     "@types/bcryptjs": "2.4.6",
-    "postcss": "8.4.41",
+    "postcss": "8.5.18",
     "autoprefixer": "10.4.20"
   },
   "prisma": {
