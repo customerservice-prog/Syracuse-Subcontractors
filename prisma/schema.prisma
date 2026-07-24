@@ -1,0 +1,880 @@
+// Syracuse Labor Dispatch Platform - Phase 1 schema
+// See docs/PHASE1-DESIGN.md for the full structural design.
+
+generator client {
+provider = "prisma-client-js"
+}
+
+datasource db {
+provider = "postgresql"
+url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum UserRole {
+SUPER_ADMIN
+DISPATCHER
+CONTRACTOR_OWNER
+CONTRACTOR_MANAGER
+SUPERVISOR
+WORKER
+APPLICANT
+}
+
+enum UserStatus {
+ACTIVE
+DISABLED
+PENDING_VERIFICATION
+}
+
+enum ContractorStatus {
+LEAD
+PENDING_REVIEW
+APPROVED
+SUSPENDED
+REJECTED
+}
+
+enum ApplicationStatus {
+SUBMITTED
+UNDER_REVIEW
+WAITLISTED
+INTERVIEW_REQUESTED
+DOCUMENTS_REQUESTED
+APPROVED
+ACTIVATED
+REJECTED
+WITHDRAWN
+ARCHIVED
+}
+
+enum WorkerStatus {
+APPLICANT
+WAITLISTED
+APPROVED
+ACTIVE
+SUSPENDED
+INACTIVE
+}
+
+enum SkillLevel {
+GENERAL_LABORER
+EXPERIENCED_LABORER
+SKILLED_HELPER
+SKILLED_TRADESPERSON
+LICENSED_TRADE
+}
+
+enum VerificationStatus {
+UNVERIFIED
+PENDING
+VERIFIED
+REJECTED
+}
+
+enum JobRequestStatus {
+DRAFT
+SUBMITTED
+UNDER_REVIEW
+QUOTED
+REJECTED
+APPROVED
+CONVERTED_TO_JOB
+}
+
+enum JobStatus {
+DRAFT
+REQUESTED
+QUOTED
+APPROVED
+DISPATCHING
+PARTIALLY_FILLED
+FILLED
+IN_PROGRESS
+COMPLETED
+CANCELED
+DISPUTED
+}
+
+enum ShiftPositionStatus {
+OPEN
+OFFERED
+FILLED
+CANCELED
+REPLACED
+DISPUTED
+}
+
+enum ShiftAssignmentStatus {
+PENDING
+CONFIRMED
+ACTIVE
+COMPLETED
+CANCELED
+WORKER_CANCELED
+CONTRACTOR_CANCELED
+NO_SHOW
+REPLACED
+DISPUTED
+}
+
+enum OfferStatus {
+QUEUED
+SENT
+VIEWED
+ACCEPTED
+DECLINED
+EXPIRED
+CANCELED
+SUPERSEDED
+POSITION_FILLED
+DELIVERY_FAILED
+}
+
+enum DispatchStrategy {
+SEQUENTIAL
+SMALL_WAVE
+MANUAL_SELECTION
+CREW_OFFER
+EMERGENCY_BROADCAST
+}
+
+enum TimeEntryStatus {
+CHECKED_IN
+CHECKED_OUT
+PENDING_APPROVAL
+APPROVED
+DISPUTED
+}
+
+enum InvoiceStatus {
+DRAFT
+SENT
+VIEWED
+PARTIALLY_PAID
+PAID
+OVERDUE
+VOID
+DISPUTED
+}
+
+enum PreferenceType {
+FAVORITE
+PREFERRED
+BLOCKED
+DO_NOT_SEND
+}
+
+enum CrewRole {
+LEADER
+ASSISTANT_LEADER
+MEMBER
+}
+
+enum CrewMembershipStatus {
+ACTIVE
+TEMPORARY
+ENDED
+}
+
+// ---------- Identity & organizations ----------
+
+model User {
+id            String   @id @default(cuid())
+email         String   @unique
+passwordHash  String?
+role          UserRole
+status        UserStatus @default(PENDING_VERIFICATION)
+createdAt     DateTime @default(now())
+updatedAt     DateTime @updatedAt
+
+contractorUser ContractorUser?
+workerProfile  WorkerProfile?
+auditLogs      AuditLog[]
+}
+
+model Market {
+id          String        @id @default(cuid())
+name        String        @unique
+serviceAreas ServiceArea[]
+createdAt   DateTime      @default(now())
+}
+
+model ServiceArea {
+id        String   @id @default(cuid())
+marketId  String
+market    Market   @relation(fields: [marketId], references: [id])
+label     String
+postalCodes String[]
+}
+
+model Contractor {
+id            String            @id @default(cuid())
+companyName   String
+status        ContractorStatus  @default(LEAD)
+marketId      String?
+interestId    String?           @unique
+interest      ContractorInterest? @relation(fields: [interestId], references: [id])
+createdAt     DateTime          @default(now())
+updatedAt     DateTime          @updatedAt
+
+users         ContractorUser[]
+invites       ContractorInvite[]
+jobRequests   JobRequest[]
+jobs          Job[]
+invoices      Invoice[]
+workerPreferences ContractorWorkerPreference[]
+workerRatings ContractorWorkerRating[]
+crewPreferences ContractorCrewPreference[]
+crewRatings   ContractorCrewRating[]
+}
+
+model ContractorInterest {
+id          String   @id @default(cuid())
+companyName String
+contactName String
+contactEmail String
+contactPhone String
+notes       String?
+createdAt   DateTime @default(now())
+contractor  Contractor?
+}
+
+model ContractorUser {
+id           String   @id @default(cuid())
+userId       String   @unique
+user         User     @relation(fields: [userId], references: [id])
+contractorId String
+contractor   Contractor @relation(fields: [contractorId], references: [id])
+role         UserRole
+createdAt    DateTime @default(now())
+}
+
+model ContractorInvite {
+id           String   @id @default(cuid())
+contractorId String
+contractor   Contractor @relation(fields: [contractorId], references: [id])
+token        String   @unique
+email        String
+expiresAt    DateTime
+usedAt       DateTime?
+createdAt    DateTime @default(now())
+}
+
+// ---------- Applicants & workers ----------
+
+model Application {
+id            String            @id @default(cuid())
+firstName     String
+lastName      String
+phone         String
+email         String
+address       String?
+transportation String?
+workRadiusMiles Int?
+status        ApplicationStatus @default(SUBMITTED)
+referralCode  String?
+resumeUrl     String?
+createdAt     DateTime          @default(now())
+updatedAt     DateTime          @updatedAt
+
+skillInterests ApplicationSkillInterest[]
+statusHistory  ApplicationStatusHistory[]
+workerProfile  WorkerProfile?
+}
+
+model ApplicationSkillInterest {
+id            String   @id @default(cuid())
+applicationId String
+application   Application @relation(fields: [applicationId], references: [id])
+skillId       String
+skill         Skill    @relation(fields: [skillId], references: [id])
+}
+
+model ApplicationStatusHistory {
+id            String   @id @default(cuid())
+applicationId String
+application   Application @relation(fields: [applicationId], references: [id])
+fromStatus    ApplicationStatus?
+toStatus      ApplicationStatus
+reason        String?
+actorUserId   String?
+createdAt     DateTime @default(now())
+}
+
+model WorkerProfile {
+id              String   @id @default(cuid())
+userId          String   @unique
+user            User     @relation(fields: [userId], references: [id])
+applicationId   String   @unique
+application     Application @relation(fields: [applicationId], references: [id])
+status          WorkerStatus @default(APPROVED)
+address         String?
+transportation  String?
+workRadiusMiles Int?
+languages       String[]
+emergencyContact String?
+createdAt       DateTime @default(now())
+updatedAt       DateTime @updatedAt
+
+skills          WorkerSkill[]
+certifications  WorkerCertification[]
+availabilityRules WorkerAvailabilityRule[]
+availabilityExceptions WorkerAvailabilityException[]
+offerPauses     WorkerOfferPause[]
+timeOff         WorkerTimeOff[]
+crewMemberships CrewMembership[]
+assignments     ShiftAssignment[]
+reliabilityEvents ReliabilityEvent[]
+reliabilitySnapshots WorkerReliabilitySnapshot[]
+contractorPreferences ContractorWorkerPreference[]
+contractorRatings ContractorWorkerRating[]
+waitlistEntry   WaitlistEntry?
+}
+
+model WaitlistEntry {
+id              String   @id @default(cuid())
+workerProfileId String   @unique
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+skillCategory   String
+position        Int?
+createdAt       DateTime @default(now())
+}
+
+// ---------- Skills & certifications ----------
+
+model Skill {
+id        String   @id @default(cuid())
+name      String   @unique
+category  String
+workerSkills WorkerSkill[]
+applicationInterests ApplicationSkillInterest[]
+positionRequirements PositionRequiredSkill[]
+}
+
+model WorkerSkill {
+id                String   @id @default(cuid())
+workerProfileId   String
+workerProfile     WorkerProfile @relation(fields: [workerProfileId], references: [id])
+skillId           String
+skill             Skill    @relation(fields: [skillId], references: [id])
+level             SkillLevel
+yearsExperience   Int?
+verificationStatus VerificationStatus @default(UNVERIFIED)
+verifiedBy        String?
+verifiedAt        DateTime?
+verificationMethod String?
+lastUsedAt        DateTime?
+notes             String?
+}
+
+model CertificationType {
+id        String   @id @default(cuid())
+name      String   @unique
+workerCertifications WorkerCertification[]
+positionRequirements PositionRequiredCertification[]
+}
+
+model WorkerCertification {
+id                  String   @id @default(cuid())
+workerProfileId     String
+workerProfile       WorkerProfile @relation(fields: [workerProfileId], references: [id])
+certificationTypeId String
+certificationType   CertificationType @relation(fields: [certificationTypeId], references: [id])
+certificationNumber String?
+issuingOrganization String?
+issuedDate          DateTime?
+expirationDate      DateTime?
+verificationStatus  VerificationStatus @default(UNVERIFIED)
+verificationSource  String?
+documentRef         String?
+verifiedBy          String?
+verifiedAt          DateTime?
+}
+
+// ---------- Availability ----------
+
+model WorkerAvailabilityRule {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+dayOfWeek       Int
+startTime       String
+endTime         String
+}
+
+model WorkerAvailabilityException {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+date            DateTime
+available       Boolean
+notes           String?
+}
+
+model WorkerOfferPause {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+startAt         DateTime
+endAt           DateTime?
+reason          String?
+createdAt       DateTime @default(now())
+}
+
+model WorkerTimeOff {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+startDate       DateTime
+endDate         DateTime
+reason          String?
+}
+
+// ---------- Crews ----------
+
+model Crew {
+id          String   @id @default(cuid())
+name        String
+leaderWorkerProfileId String?
+status      String   @default("active")
+createdAt   DateTime @default(now())
+
+memberships CrewMembership[]
+contractorPreferences ContractorCrewPreference[]
+contractorRatings ContractorCrewRating[]
+}
+
+model CrewMembership {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+crewId          String
+crew            Crew     @relation(fields: [crewId], references: [id])
+role            CrewRole @default(MEMBER)
+status          CrewMembershipStatus @default(ACTIVE)
+joinedAt        DateTime @default(now())
+leftAt          DateTime?
+isPrimaryCrew   Boolean  @default(false)
+createdBy       String?
+}
+
+// ---------- Contractor <-> worker/crew relationships ----------
+
+model ContractorWorkerPreference {
+id              String   @id @default(cuid())
+contractorId    String
+contractor      Contractor @relation(fields: [contractorId], references: [id])
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+type            PreferenceType
+reason          String?
+internalNotes   String?
+createdBy       String?
+createdAt       DateTime @default(now())
+}
+
+model ContractorWorkerRating {
+id              String   @id @default(cuid())
+contractorId    String
+contractor      Contractor @relation(fields: [contractorId], references: [id])
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+rating          Int
+comments        String?
+createdAt       DateTime @default(now())
+}
+
+model ContractorCrewPreference {
+id           String   @id @default(cuid())
+contractorId String
+contractor   Contractor @relation(fields: [contractorId], references: [id])
+crewId       String
+crew         Crew     @relation(fields: [crewId], references: [id])
+type         PreferenceType
+reason       String?
+createdAt    DateTime @default(now())
+}
+
+model ContractorCrewRating {
+id           String   @id @default(cuid())
+contractorId String
+contractor   Contractor @relation(fields: [contractorId], references: [id])
+crewId       String
+crew         Crew     @relation(fields: [crewId], references: [id])
+rating       Int
+comments     String?
+createdAt    DateTime @default(now())
+}
+
+// ---------- Job requests, jobs, shifts, positions ----------
+
+model JobRequest {
+id            String            @id @default(cuid())
+contractorId  String
+contractor    Contractor        @relation(fields: [contractorId], references: [id])
+status        JobRequestStatus  @default(DRAFT)
+jobType       String
+requestedWorkerCount Int
+requestedDate DateTime
+requestedStartTime String
+requestedEndTime   String
+jobsiteAddress String
+notes         String?
+repeatOfJobId String?
+createdAt     DateTime          @default(now())
+updatedAt     DateTime          @updatedAt
+
+jobs          Job[]
+}
+
+model Job {
+id            String    @id @default(cuid())
+jobRequestId  String
+jobRequest    JobRequest @relation(fields: [jobRequestId], references: [id])
+contractorId  String
+contractor    Contractor @relation(fields: [contractorId], references: [id])
+status        JobStatus @default(DRAFT)
+address       String
+latitude      Float?
+longitude     Float?
+supervisorName String?
+supervisorPhone String?
+parkingNotes  String?
+safetyInstructions String?
+generalPpeRequired String[]
+weatherNotes  String?
+createdAt     DateTime  @default(now())
+updatedAt     DateTime  @updatedAt
+
+shifts        Shift[]
+documents     JobDocument[]
+}
+
+model JobDocument {
+id        String   @id @default(cuid())
+jobId     String
+job       Job      @relation(fields: [jobId], references: [id])
+fileRef   String
+label     String?
+uploadedAt DateTime @default(now())
+}
+
+model Shift {
+id          String   @id @default(cuid())
+jobId       String
+job         Job      @relation(fields: [jobId], references: [id])
+shiftDate   DateTime
+startTime   String
+endTime     String
+createdAt   DateTime @default(now())
+
+positions   ShiftPosition[]
+}
+
+model ShiftPosition {
+id                String   @id @default(cuid())
+shiftId           String
+shift             Shift    @relation(fields: [shiftId], references: [id])
+status            ShiftPositionStatus @default(OPEN)
+requiredTransportation Boolean @default(false)
+requiredToolsOwned String[]
+workerPayRateSnapshot  Decimal
+contractorBillRateSnapshot Decimal
+createdAt         DateTime @default(now())
+updatedAt         DateTime @updatedAt
+
+requiredSkills    PositionRequiredSkill[]
+requiredCertifications PositionRequiredCertification[]
+offers            Offer[]
+assignments       ShiftAssignment[]
+matchingRuns      MatchingRun[]
+}
+
+model PositionRequiredSkill {
+id         String   @id @default(cuid())
+positionId String
+position   ShiftPosition @relation(fields: [positionId], references: [id])
+skillId    String
+skill      Skill    @relation(fields: [skillId], references: [id])
+minimumLevel SkillLevel
+}
+
+model PositionRequiredCertification {
+id                  String   @id @default(cuid())
+positionId          String
+position            ShiftPosition @relation(fields: [positionId], references: [id])
+certificationTypeId String
+certificationType   CertificationType @relation(fields: [certificationTypeId], references: [id])
+}
+
+// ---------- Assignments, matching, offers ----------
+
+model ShiftAssignment {
+id              String   @id @default(cuid())
+positionId      String
+position        ShiftPosition @relation(fields: [positionId], references: [id])
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+status          ShiftAssignmentStatus @default(PENDING)
+isCurrent       Boolean  @default(true)
+replacesAssignmentId String?
+replacementReason String?
+workerPayRateSnapshot Decimal
+contractorBillRateSnapshot Decimal
+createdAt       DateTime @default(now())
+updatedAt       DateTime @updatedAt
+endedAt         DateTime?
+
+timeEntry       TimeEntry?
+}
+
+model MatchingRun {
+id            String   @id @default(cuid())
+positionId    String
+position      ShiftPosition @relation(fields: [positionId], references: [id])
+configVersion String
+generatedAt   DateTime @default(now())
+
+candidates    MatchingCandidate[]
+}
+
+model MatchingCandidate {
+id              String   @id @default(cuid())
+matchingRunId   String
+matchingRun     MatchingRun @relation(fields: [matchingRunId], references: [id])
+workerProfileId String
+eligible        Boolean
+exclusionReasons String[]
+totalScore      Float?
+distanceScore   Float?
+reliabilityScore Float?
+skillScore      Float?
+attendanceScore Float?
+priorContractorScore Float?
+rank            Int?
+}
+
+model Offer {
+id              String   @id @default(cuid())
+positionId      String
+position        ShiftPosition @relation(fields: [positionId], references: [id])
+workerProfileId String
+status          OfferStatus @default(QUEUED)
+dispatchStrategy DispatchStrategy @default(SEQUENTIAL)
+waveNumber      Int      @default(1)
+sentAt          DateTime?
+viewedAt        DateTime?
+respondedAt     DateTime?
+expiresAt       DateTime?
+deliveryMethod  String?
+deliveryStatus  String?
+declineReason   String?
+expirationReason String?
+createdAt       DateTime @default(now())
+}
+
+// ---------- Notifications ----------
+
+model NotificationEvent {
+id          String   @id @default(cuid())
+type        String
+entityType  String
+entityId    String
+payload     Json?
+createdAt   DateTime @default(now())
+
+recipients  NotificationRecipient[]
+}
+
+model NotificationRecipient {
+id          String   @id @default(cuid())
+eventId     String
+event       NotificationEvent @relation(fields: [eventId], references: [id])
+userId      String?
+workerProfileId String?
+contractorUserId String?
+deliveryAttempts NotificationDeliveryAttempt[]
+}
+
+model NotificationDeliveryAttempt {
+id            String   @id @default(cuid())
+recipientId   String
+recipient     NotificationRecipient @relation(fields: [recipientId], references: [id])
+channel       String
+status        String
+providerResponse String?
+retryCount    Int      @default(0)
+failureReason String?
+attemptedAt   DateTime @default(now())
+}
+
+// ---------- Time tracking ----------
+
+model TimeEntry {
+id                String   @id @default(cuid())
+assignmentId      String   @unique
+assignment        ShiftAssignment @relation(fields: [assignmentId], references: [id])
+status            TimeEntryStatus @default(CHECKED_IN)
+scheduledStart    DateTime?
+scheduledEnd      DateTime?
+checkInDeviceAt   DateTime?
+checkInServerAt   DateTime?
+checkInLat        Float?
+checkInLng        Float?
+checkInAccuracy   Float?
+geofenceRadiusMeters Int?
+geofenceResult    String?
+qrValidationResult String?
+checkOutDeviceAt  DateTime?
+checkOutServerAt  DateTime?
+checkOutLat       Float?
+checkOutLng       Float?
+breakMinutes      Int      @default(0)
+disputeStatus     String?
+createdAt         DateTime @default(now())
+
+adjustments       TimeAdjustment[]
+}
+
+model TimeAdjustment {
+id            String   @id @default(cuid())
+timeEntryId   String
+timeEntry     TimeEntry @relation(fields: [timeEntryId], references: [id])
+field         String
+previousValue String?
+newValue      String?
+reason        String
+requestedBy   String?
+approvedBy    String?
+approvedAt    DateTime?
+createdAt     DateTime @default(now())
+}
+
+// ---------- Reliability ----------
+
+model ReliabilityEvent {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+type            String
+relatedOfferId  String?
+relatedAssignmentId String?
+notes           String?
+createdAt       DateTime @default(now())
+}
+
+model WorkerReliabilitySnapshot {
+id              String   @id @default(cuid())
+workerProfileId String
+workerProfile   WorkerProfile @relation(fields: [workerProfileId], references: [id])
+score           Float
+configVersion   String
+generatedAt     DateTime @default(now())
+}
+
+// ---------- Invoicing ----------
+
+model Invoice {
+id            String   @id @default(cuid())
+invoiceNumber String   @unique
+contractorId  String
+contractor    Contractor @relation(fields: [contractorId], references: [id])
+status        InvoiceStatus @default(DRAFT)
+subtotal      Decimal
+total         Decimal
+createdAt     DateTime @default(now())
+finalizedAt   DateTime?
+
+lineItems     InvoiceLineItem[]
+adjustments   InvoiceAdjustment[]
+creditMemos   CreditMemo[]
+statusHistory InvoiceStatusHistory[]
+payments      PaymentRecord[]
+}
+
+model InvoiceLineItem {
+id            String   @id @default(cuid())
+invoiceId     String
+invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+assignmentId  String?
+description   String
+quantity      Decimal
+rate          Decimal
+amount        Decimal
+lineType      String
+}
+
+model PaymentRecord {
+id            String   @id @default(cuid())
+invoiceId     String
+invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+provider      String   @default("mock")
+amount        Decimal
+status        String
+createdAt     DateTime @default(now())
+}
+
+model CreditMemo {
+id            String   @id @default(cuid())
+invoiceId     String
+invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+amount        Decimal
+reason        String
+createdAt     DateTime @default(now())
+}
+
+model InvoiceAdjustment {
+id            String   @id @default(cuid())
+invoiceId     String
+invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+amount        Decimal
+reason        String
+createdBy     String?
+createdAt     DateTime @default(now())
+}
+
+model InvoiceStatusHistory {
+id            String   @id @default(cuid())
+invoiceId     String
+invoice       Invoice  @relation(fields: [invoiceId], references: [id])
+fromStatus    InvoiceStatus?
+toStatus      InvoiceStatus
+createdAt     DateTime @default(now())
+}
+
+// ---------- Capacity & demand ----------
+
+model CapacitySetting {
+id                String   @id @default(cuid())
+skillCategory     String
+skillLevel        SkillLevel?
+serviceAreaId     String?
+activeWorkerTarget Int?
+hardMaximum       Int?
+minimumReserve    Int?
+effectiveDate     DateTime @default(now())
+adminOverride     Boolean  @default(false)
+paused            Boolean  @default(false)
+createdAt         DateTime @default(now())
+}
+
+// ---------- Audit ----------
+
+model AuditLog {
+id            String   @id @default(cuid())
+actorUserId   String?
+actor         User?    @relation(fields: [actorUserId], references: [id])
+actorRole     String?
+action        String
+entityType    String
+entityPublicId String
+requestId     String?
+beforeJson    Json?
+afterJson     Json?
+reason        String?
+ipAddress     String?
+userAgent     String?
+createdAt     DateTime @default(now())
+}
