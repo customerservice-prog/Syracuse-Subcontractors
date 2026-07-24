@@ -147,3 +147,10 @@ export function canViewJobRequest(
   }
   return deny("Only admins, dispatchers, or the owning contractor's staff may view this job request.");
 }
+
+export function canManageApplicationLifecycle(user: ActingUser): PolicyResult {
+  if (isAdmin(user)) {
+    return allow("Admin/dispatcher roles may manage application status transitions.");
+  }
+  return deny("Only admins or dispatchers may transition an application's status.");
+}
