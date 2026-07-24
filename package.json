@@ -39,5 +39,8 @@
     "@types/bcryptjs": "2.4.6",
     "postcss": "8.4.41",
     "autoprefixer": "10.4.20"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
