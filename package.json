@@ -1,0 +1,43 @@
+{
+  "name": "syracuse-labor-dispatch",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local labor dispatch platform - Phase 1 MVP. Temporary brand name; replace via config/brand.ts.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:format": "prisma format"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@prisma/client": "5.18.0",
+    "next-auth": "5.0.0-beta.20",
+    "@auth/prisma-adapter": "2.4.2",
+    "zod": "3.23.8",
+    "bcryptjs": "2.4.3",
+    "tailwindcss": "3.4.7",
+    "clsx": "2.1.1"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4",
+    "prisma": "5.18.0",
+    "tsx": "4.16.5",
+    "vitest": "2.0.5",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.5",
+    "@types/node": "20.14.15",
+    "@types/react": "18.3.3",
+    "@types/bcryptjs": "2.4.6",
+    "postcss": "8.4.41",
+    "autoprefixer": "10.4.20"
+  }
+}
