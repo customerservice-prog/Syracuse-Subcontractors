@@ -8,6 +8,11 @@ import { approveContractorInterestAction, transitionApplicationAction } from "./
 // contractor, move an application forward) rather than a full workspace -
 // dispatch, offers, and time approval land in later phases per
 // docs/PHASE1-DESIGN.md.
+//
+// This page reads live, per-request data (auth session plus several DB
+// queries) and must never be statically prerendered at build time.
+export const dynamic = "force-dynamic";
+
 export default async function AdminPage({
   searchParams,
 }: {
