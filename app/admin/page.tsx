@@ -11,6 +11,9 @@ import {
   generateInvoiceAction,
   addInvoiceAdjustmentAction,
   transitionInvoiceStatusAction,
+  createCrewAction,
+  addCrewMemberAction,
+  removeCrewMemberAction,
 } from "./actions";
 import { listJobsForAdmin } from "@/lib/services/job.service";
 import { listOpenPositionsForAdmin, expireStaleOffers } from "@/lib/services/dispatch.service";
@@ -19,16 +22,8 @@ import {
   listContractorsWithUninvoicedApprovedHours,
   listInvoicesForAdmin,
 } from "@/lib/services/invoice.service";
+import { listCrewsForAdmin, listActiveWorkersForCrewAssignment } from "@/lib/services/crew.service";
 
-// Admin/dispatcher dashboard overview for Phase 1/2/3. This is intentionally
-// a read-heavy screen with a small number of high-value actions (approve a
-// contractor, move an application forward, convert a job request into a
-// schedulable job, run matching and send offers, approve worked hours,
-// generate and manage invoices) rather than a full workspace, per
-// docs/PHASE1-DESIGN.md.
-//
-// This page reads live, per-request data (auth session plus several DB
-// queries) and must never be statically prerendered at build time.
 export const dynamic = "force-dynamic";
 
 const INVOICE_NEXT_STATUSES: Record<string, string[]> = {
@@ -52,13 +47,7 @@ export default async function AdminPage({
     redirect("/login");
   }
 
-  // Opportunistic sweep: until a real scheduler is wired up to
-  // /api/cron/expire-offers (see that route for details), expire any offers
-  // whose response window has passed whenever an admin loads this page, so
-  // stale offers don't silently block a position. Cheap no-op when nothing
-  // is stale.
   await expireStaleOffers();
-
   const [
     pendingContractorInterests,
     pendingJobRequests,
@@ -70,6 +59,8 @@ export default async function AdminPage({
     timeEntriesAwaitingApproval,
     contractorsWithUninvoicedHours,
     invoices,
+    crews,
+    activeWorkersForCrewAssignment,
   ] = await Promise.all([
     db.contractorInterest.findMany({
       where: { contractor: null },
@@ -92,6 +83,8 @@ export default async function AdminPage({
     listTimeEntriesAwaitingApproval(),
     listContractorsWithUninvoicedApprovedHours(),
     listInvoicesForAdmin(),
+    listCrewsForAdmin(),
+    listActiveWorkersForCrewAssignment(),
   ]);
 
   return (
@@ -125,7 +118,6 @@ export default async function AdminPage({
           <p className="mt-1 text-2xl font-semibold text-slate-900">{reviewApplications.length}</p>
         </div>
       </div>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Pending contractor interests</h2>
         {pendingContractorInterests.length === 0 ? (
@@ -217,7 +209,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Dispatch: open positions</h2>
         <p className="text-sm text-slate-500">
@@ -300,7 +291,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Hours awaiting approval</h2>
         <p className="text-sm text-slate-500">
@@ -375,7 +365,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
         {invoices.length === 0 ? (
@@ -453,7 +442,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Active jobs</h2>
         {jobs.length === 0 ? (
@@ -483,6 +471,98 @@ export default async function AdminPage({
         )}
       </section>
 
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Crews</h2>
+        <p className="text-sm text-slate-500">
+          Crews are admin-managed in this MVP. Membership changes are tracked as history - removing a member ends
+          their membership rather than deleting the record.
+        </p>
+
+        <form action={createCrewAction} className="flex flex-wrap items-center gap-2">
+          <input
+            name="name"
+            required
+            placeholder="New crew name"
+            className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+          />
+          <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+            Create crew
+          </button>
+        </form>
+
+        {crews.length === 0 ? (
+          <p className="text-sm text-slate-500">No crews created yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {crews.map((crew) => (
+              <div key={crew.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-900">{crew.name}</p>
+                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
+                    {crew.status}
+                  </span>
+                </div>
+
+                {crew.averageRating !== null ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Average contractor rating: {crew.averageRating.toFixed(1)} / 5 ({crew.ratingCount} rating(s))
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-slate-500">No contractor ratings yet.</p>
+                )}
+
+                <div className="mt-2 space-y-1">
+                  {crew.members.length === 0 ? (
+                    <p className="text-xs text-slate-500">No active members.</p>
+                  ) : (
+                    crew.members.map((member) => (
+                      <div
+                        key={member.membershipId}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <p className="text-xs text-slate-700">
+                          {member.name} - {member.role.replace("_", " ").toLowerCase()}
+                          {member.isPrimaryCrew ? " (primary)" : ""}
+                        </p>
+                        <form action={removeCrewMemberAction}>
+                          <input type="hidden" name="crewMembershipId" value={member.membershipId} />
+                          <button className="rounded-md border border-red-300 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50">
+                            Remove
+                          </button>
+                        </form>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <form action={addCrewMemberAction} className="mt-3 flex flex-wrap items-center gap-2">
+                  <input type="hidden" name="crewId" value={crew.id} />
+                  <select
+                    name="workerProfileId"
+                    required
+                    className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                  >
+                    <option value="">Select worker...</option>
+                    {activeWorkersForCrewAssignment.map((w) => (
+                      <option key={w.workerProfileId} value={w.workerProfileId}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select name="role" className="rounded-md border border-slate-300 px-2 py-1.5 text-xs">
+                    <option value="MEMBER">Member</option>
+                    <option value="ASSISTANT_LEADER">Assistant leader</option>
+                    <option value="LEADER">Leader</option>
+                  </select>
+                  <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                    Add member
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Applications to review</h2>
         {reviewApplications.length === 0 ? (
