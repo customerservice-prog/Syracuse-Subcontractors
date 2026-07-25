@@ -2,16 +2,21 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
 import { getWorkerProfile } from "@/lib/services/worker.service";
+import { acceptOfferAction, declineOfferAction } from "./actions";
 
 // Worker dashboard for Phase 1/2. Like the admin dashboard, this is
-// intentionally read-heavy for now - accepting/declining offers, checking
-// in/out, and updating availability land with the dispatch and time-tracking
-// phases per docs/PHASE1-DESIGN.md. This page only ever shows a worker their
-// OWN data; canViewWorkerProfile enforces that server-side, and being active
-// here never implies guaranteed hours.
+// intentionally read-heavy for now - checking in/out and updating
+// availability land with the time-tracking phase per docs/PHASE1-DESIGN.md.
+// This page only ever shows a worker their OWN data; canViewWorkerProfile /
+// canRespondToOffer enforce that server-side, and being active here never
+// implies guaranteed hours.
 export const dynamic = "force-dynamic";
 
-export default async function WorkerPage() {
+export default async function WorkerPage({
+  searchParams,
+}: {
+  searchParams: { error?: string };
+}) {
   const actingUser = await getActingUser();
 
   if (!actingUser || actingUser.role !== "WORKER" || !actingUser.workerProfileId) {
@@ -60,6 +65,12 @@ export default async function WorkerPage() {
         </p>
       </div>
 
+      {searchParams.error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {searchParams.error}
+        </div>
+      ) : null}
+
       <div className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
         Shifts are offered based on contractor demand and your skills/availability. Being active does not
         guarantee hours - check back here for new offers.
@@ -99,8 +110,23 @@ export default async function WorkerPage() {
                   {offer.position.shift.endTime} at {offer.position.shift.job.address}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Offer status: {offer.status.toLowerCase()} - accept/decline actions arrive with the dispatch phase.
+                  Pay rate: ${offer.position.workerPayRateSnapshot.toString()}/hr
+                  {offer.expiresAt ? ` - offer expires ${offer.expiresAt.toISOString().slice(0, 16).replace("T", " ")}` : ""}
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <form action={acceptOfferAction}>
+                    <input type="hidden" name="offerId" value={offer.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                      Accept
+                    </button>
+                  </form>
+                  <form action={declineOfferAction}>
+                    <input type="hidden" name="offerId" value={offer.id} />
+                    <button className="rounded-md border border-red-300 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50">
+                      Decline
+                    </button>
+                  </form>
+                </div>
               </div>
             ))}
           </div>
