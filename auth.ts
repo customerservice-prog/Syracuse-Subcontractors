@@ -13,6 +13,14 @@ import type { UserRole, UserStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Railway (like most PaaS hosts) terminates TLS at a proxy in front of the
+  // app, so Auth.js cannot otherwise verify the incoming Host header against
+  // a statically known origin. Without trustHost, session/auth requests
+  // intermittently fail with an "UntrustedHost" error, which can silently
+  // break login. This is the officially recommended setting for apps
+  // deployed behind a reverse proxy (Railway, Docker, etc.) - see
+  // https://errors.authjs.dev#untrustedhost.
+  trustHost: true,
   session: {
     strategy: "jwt",
     maxAge: 60 * 60 * 12,
