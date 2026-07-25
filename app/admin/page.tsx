@@ -8,21 +8,39 @@ import {
   findCandidatesAction,
   sendOfferAction,
   approveTimeEntryAction,
+  generateInvoiceAction,
+  addInvoiceAdjustmentAction,
+  transitionInvoiceStatusAction,
 } from "./actions";
 import { listJobsForAdmin } from "@/lib/services/job.service";
 import { listOpenPositionsForAdmin, expireStaleOffers } from "@/lib/services/dispatch.service";
 import { listTimeEntriesAwaitingApproval } from "@/lib/services/time.service";
+import {
+  listContractorsWithUninvoicedApprovedHours,
+  listInvoicesForAdmin,
+} from "@/lib/services/invoice.service";
 
 // Admin/dispatcher dashboard overview for Phase 1/2/3. This is intentionally
 // a read-heavy screen with a small number of high-value actions (approve a
 // contractor, move an application forward, convert a job request into a
-// schedulable job, run matching and send offers, approve worked hours)
-// rather than a full workspace - invoicing lands in a later phase per
+// schedulable job, run matching and send offers, approve worked hours,
+// generate and manage invoices) rather than a full workspace, per
 // docs/PHASE1-DESIGN.md.
 //
 // This page reads live, per-request data (auth session plus several DB
 // queries) and must never be statically prerendered at build time.
 export const dynamic = "force-dynamic";
+
+const INVOICE_NEXT_STATUSES: Record<string, string[]> = {
+  DRAFT: ["SENT", "VOID"],
+  SENT: ["VIEWED", "PARTIALLY_PAID", "PAID", "OVERDUE", "DISPUTED", "VOID"],
+  VIEWED: ["PARTIALLY_PAID", "PAID", "OVERDUE", "DISPUTED", "VOID"],
+  PARTIALLY_PAID: ["PAID", "OVERDUE", "DISPUTED", "VOID"],
+  OVERDUE: ["PARTIALLY_PAID", "PAID", "DISPUTED", "VOID"],
+  DISPUTED: ["SENT", "VOID"],
+  PAID: [],
+  VOID: [],
+};
 
 export default async function AdminPage({
   searchParams,
@@ -50,6 +68,8 @@ export default async function AdminPage({
     jobs,
     openPositions,
     timeEntriesAwaitingApproval,
+    contractorsWithUninvoicedHours,
+    invoices,
   ] = await Promise.all([
     db.contractorInterest.findMany({
       where: { contractor: null },
@@ -70,6 +90,8 @@ export default async function AdminPage({
     listJobsForAdmin(),
     listOpenPositionsForAdmin(),
     listTimeEntriesAwaitingApproval(),
+    listContractorsWithUninvoicedApprovedHours(),
+    listInvoicesForAdmin(),
   ]);
 
   return (
@@ -315,6 +337,116 @@ export default async function AdminPage({
                       Approve hours
                     </button>
                   </form>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Generate invoices</h2>
+        <p className="text-sm text-slate-500">
+          Contractors below have approved, not-yet-invoiced hours. Generating an invoice always produces a new
+          DRAFT - nothing is sent to the contractor and no payment is processed until you explicitly move it
+          forward.
+        </p>
+        {contractorsWithUninvoicedHours.length === 0 ? (
+          <p className="text-sm text-slate-500">No contractors currently have approved hours awaiting invoicing.</p>
+        ) : (
+          <div className="space-y-3">
+            {contractorsWithUninvoicedHours.map((c) => (
+              <div
+                key={c.contractorId}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-4"
+              >
+                <p className="text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">{c.companyName}</span> - {c.assignmentCount} approved
+                  shift(s) not yet invoiced
+                </p>
+                <form action={generateInvoiceAction}>
+                  <input type="hidden" name="contractorId" value={c.contractorId} />
+                  <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                    Generate draft invoice
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
+        {invoices.length === 0 ? (
+          <p className="text-sm text-slate-500">No invoices have been generated yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {invoices.map((invoice) => {
+              const nextStatuses = INVOICE_NEXT_STATUSES[invoice.status] ?? [];
+              return (
+                <div key={invoice.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {invoice.invoiceNumber} - {invoice.contractor.companyName}
+                      </p>
+                      <p className="text-sm text-slate-600">Total: ${invoice.total.toString()}</p>
+                    </div>
+                    <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
+                      {invoice.status.replace("_", " ").toLowerCase()}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 space-y-1">
+                    {invoice.lineItems.map((li) => (
+                      <p key={li.id} className="text-xs text-slate-500">
+                        {li.description}: {li.quantity.toString()} x ${li.rate.toString()} = ${li.amount.toString()}
+                      </p>
+                    ))}
+                    {invoice.adjustments.map((adj) => (
+                      <p key={adj.id} className="text-xs text-amber-700">
+                        Adjustment: ${adj.amount.toString()} - {adj.reason}
+                      </p>
+                    ))}
+                  </div>
+
+                  {invoice.status === "DRAFT" ? (
+                    <form action={addInvoiceAdjustmentAction} className="mt-3 grid gap-2 sm:grid-cols-4">
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <input
+                        name="amount"
+                        type="number"
+                        step="0.01"
+                        required
+                        placeholder="Adjustment amount ($)"
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                      />
+                      <input
+                        name="reason"
+                        required
+                        placeholder="Reason"
+                        className="rounded-md border border-slate-300 px-2 py-1.5 text-xs sm:col-span-2"
+                      />
+                      <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                        Add adjustment
+                      </button>
+                    </form>
+                  ) : null}
+
+                  {nextStatuses.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {nextStatuses.map((status) => (
+                        <form key={status} action={transitionInvoiceStatusAction}>
+                          <input type="hidden" name="invoiceId" value={invoice.id} />
+                          <input type="hidden" name="toStatus" value={status} />
+                          <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                            Mark {status.replace("_", " ").toLowerCase()}
+                          </button>
+                        </form>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
