@@ -19,8 +19,14 @@ import {
   ForbiddenError as DispatchForbiddenError,
   InvalidDispatchStateError,
 } from "@/lib/services/dispatch.service";
+import {
+  approveTimeEntry,
+  ForbiddenError as TimeForbiddenError,
+  InvalidTimeEntryStateError,
+} from "@/lib/services/time.service";
 import { convertJobRequestSchema } from "@/lib/validation/job.schema";
 import { findCandidatesSchema, sendOfferSchema } from "@/lib/validation/dispatch.schema";
+import { approveTimeEntrySchema } from "@/lib/validation/time.schema";
 import type { ApplicationStatus } from "@prisma/client";
 
 async function requireAdmin() {
@@ -144,6 +150,31 @@ export async function sendOfferAction(formData: FormData) {
     await sendOfferToWorker(actingUser, parsed.data);
   } catch (error) {
     if (error instanceof DispatchForbiddenError || error instanceof InvalidDispatchStateError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Approves worked hours for a completed (checked-out) time entry. Approving
+// marks the ShiftAssignment COMPLETED and records a positive reliability
+// event - see lib/services/time.service.ts.
+export async function approveTimeEntryAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = approveTimeEntrySchema.safeParse({
+    timeEntryId: String(formData.get("timeEntryId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("A time entry is required to approve hours.")}`);
+  }
+
+  try {
+    await approveTimeEntry(actingUser, parsed.data.timeEntryId);
+  } catch (error) {
+    if (error instanceof TimeForbiddenError || error instanceof InvalidTimeEntryStateError) {
       redirect(`/admin?error=${encodeURIComponent(error.message)}`);
     }
     throw error;
