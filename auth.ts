@@ -9,6 +9,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+import type { UserRole, UserStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -80,11 +81,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id;
-        session.user.role = token.role;
-        session.user.status = token.status;
-        session.user.contractorId = token.contractorId ?? null;
-        session.user.workerProfileId = token.workerProfileId ?? null;
+        session.user.id = token.id as string;
+        session.user.role = token.role as UserRole;
+        session.user.status = token.status as UserStatus;
+        session.user.contractorId = (token.contractorId as string | null | undefined) ?? null;
+        session.user.workerProfileId = (token.workerProfileId as string | null | undefined) ?? null;
       }
       return session;
     },
