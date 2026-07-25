@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { brand } from "@/config/brand";
+import { getActingUser } from "@/lib/auth/get-acting-user";
+import { signOutAction } from "@/lib/auth/actions";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,7 +9,29 @@ export const metadata: Metadata = {
   description: brand.tagline,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// Dashboard routing by role - kept in sync with middleware.ts route groups
+// and app/login/actions.ts's post-login redirect so a signed-in user always
+// has one obvious way back to their own dashboard from any page.
+function dashboardPathForRole(role?: string | null): string | null {
+  switch (role) {
+    case "SUPER_ADMIN":
+    case "DISPATCHER":
+      return "/admin";
+    case "CONTRACTOR_OWNER":
+    case "CONTRACTOR_MANAGER":
+    case "SUPERVISOR":
+      return "/contractor";
+    case "WORKER":
+      return "/worker";
+    default:
+      return null;
+  }
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const actingUser = await getActingUser();
+  const dashboardPath = dashboardPathForRole(actingUser?.role);
+
   return (
     <html lang="en">
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
@@ -16,10 +40,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <a href="/" className="text-lg font-semibold text-brand">
               {brand.shortName}
             </a>
-            <nav className="flex gap-4 text-sm">
-              <a href="/apply" className="hover:text-brand">Apply to work</a>
-              <a href="/contractor-interest" className="hover:text-brand">Hire workers</a>
-              <a href="/login" className="hover:text-brand">Log in</a>
+            <nav className="flex items-center gap-4 text-sm">
+              {actingUser ? (
+                <>
+                  {dashboardPath ? (
+                    <a href={dashboardPath} className="hover:text-brand">
+                      Dashboard
+                    </a>
+                  ) : null}
+                  <form action={signOutAction}>
+                    <button type="submit" className="hover:text-brand">
+                      Log out
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <a href="/apply" className="hover:text-brand">Apply to work</a>
+                  <a href="/contractor-interest" className="hover:text-brand">Hire workers</a>
+                  <a href="/login" className="hover:text-brand">Log in</a>
+                </>
+              )}
             </nav>
           </div>
         </header>
