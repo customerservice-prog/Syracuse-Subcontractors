@@ -2,13 +2,16 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
 import { submitJobRequestAction } from "./actions";
+import { listInvoicesForContractor } from "@/lib/services/invoice.service";
 
-// Contractor dashboard for Phase 1/2: submit a new job request and track the
-// status of requests already submitted. Matching, dispatch, and detailed
-// fill status land in later phases per docs/PHASE1-DESIGN.md - for now a
-// contractor can see their request queue and its coarse status. This page
-// only ever reads/writes data scoped to the acting user's own contractorId;
-// lib/services/contractor.service.ts re-checks that server-side.
+// Contractor dashboard for Phase 1/2/3: submit a new job request, track the
+// status of requests already submitted, and view invoices generated from
+// approved hours. Matching, dispatch, and detailed fill status live on the
+// admin side per docs/PHASE1-DESIGN.md - for now a contractor can see their
+// request queue, coarse status, and billing history. This page only ever
+// reads/writes data scoped to the acting user's own contractorId;
+// lib/services/contractor.service.ts and lib/services/invoice.service.ts
+// re-check that server-side.
 export const dynamic = "force-dynamic";
 
 const CONTRACTOR_STAFF_ROLES = ["CONTRACTOR_OWNER", "CONTRACTOR_MANAGER", "SUPERVISOR"];
@@ -26,12 +29,13 @@ export default async function ContractorPage({
 
   const contractorId = actingUser.contractorId as string;
 
-  const [contractor, jobRequests] = await Promise.all([
+  const [contractor, jobRequests, invoices] = await Promise.all([
     db.contractor.findUnique({ where: { id: contractorId } }),
     db.jobRequest.findMany({
       where: { contractorId },
       orderBy: { createdAt: "desc" },
     }),
+    listInvoicesForContractor(contractorId),
   ]);
 
   return (
@@ -130,6 +134,43 @@ export default async function ContractorPage({
                   {request.requestedStartTime}-{request.requestedEndTime} at {request.jobsiteAddress}
                 </p>
                 {request.notes ? <p className="mt-1 text-xs text-slate-500">{request.notes}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Your invoices</h2>
+        <p className="text-sm text-slate-500">
+          Invoices are generated from hours your on-site supervisor has approved. No payment is collected through
+          this platform yet - online payment is coming soon.
+        </p>
+        {invoices.length === 0 ? (
+          <p className="text-sm text-slate-500">No invoices yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {invoices.map((invoice) => (
+              <div key={invoice.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-900">{invoice.invoiceNumber}</p>
+                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
+                    {invoice.status.replace("_", " ").toLowerCase()}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">Total due: ${invoice.total.toString()}</p>
+                <div className="mt-2 space-y-1">
+                  {invoice.lineItems.map((li) => (
+                    <p key={li.id} className="text-xs text-slate-500">
+                      {li.description}: {li.quantity.toString()} hrs x ${li.rate.toString()}/hr = ${li.amount.toString()}
+                    </p>
+                  ))}
+                  {invoice.adjustments.map((adj) => (
+                    <p key={adj.id} className="text-xs text-amber-700">
+                      Adjustment: ${adj.amount.toString()} - {adj.reason}
+                    </p>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
