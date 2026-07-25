@@ -124,6 +124,30 @@ export function canViewInvoice(
   );
 }
 
+export function canGenerateInvoice(
+  user: ActingUser,
+  _target: { contractorId: string }
+): PolicyResult {
+  if (isAdmin(user)) {
+    return allow(
+      "Admin/dispatcher roles may generate a draft invoice from a contractor's approved, not-yet-invoiced hours."
+    );
+  }
+  return deny("Only admins or dispatchers may generate an invoice.");
+}
+
+export function canManageInvoiceStatus(
+  user: ActingUser,
+  _target: { contractorId: string }
+): PolicyResult {
+  if (isAdmin(user)) {
+    return allow(
+      "Admin/dispatcher roles may add invoice adjustments and change an invoice's status. No real payment is ever processed - PaymentRecord.provider defaults to \"mock\" until Stripe is wired up."
+    );
+  }
+  return deny("Only admins or dispatchers may modify an invoice's adjustments or status.");
+}
+
 export function canModifyContractor(
   user: ActingUser,
   target: { contractorId: string }
