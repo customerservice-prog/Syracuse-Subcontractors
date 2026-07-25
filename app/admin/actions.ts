@@ -13,7 +13,14 @@ import {
   ForbiddenError as JobForbiddenError,
   InvalidJobRequestStateError,
 } from "@/lib/services/job.service";
+import {
+  findCandidatesForPosition,
+  sendOfferToWorker,
+  ForbiddenError as DispatchForbiddenError,
+  InvalidDispatchStateError,
+} from "@/lib/services/dispatch.service";
 import { convertJobRequestSchema } from "@/lib/validation/job.schema";
+import { findCandidatesSchema, sendOfferSchema } from "@/lib/validation/dispatch.schema";
 import type { ApplicationStatus } from "@prisma/client";
 
 async function requireAdmin() {
@@ -94,6 +101,49 @@ export async function convertJobRequestAction(formData: FormData) {
     await convertJobRequestToJob(actingUser, parsed.data);
   } catch (error) {
     if (error instanceof JobForbiddenError || error instanceof InvalidJobRequestStateError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Runs a fresh matching pass for one open ShiftPosition and stores the ranked
+// candidate list for the admin dashboard to display. Never sends an offer by
+// itself - see dispatch.service.ts.
+export async function findCandidatesAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = findCandidatesSchema.safeParse({
+    positionId: String(formData.get("positionId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("A position is required to find candidates.")}`);
+  }
+
+  await findCandidatesForPosition(actingUser, parsed.data.positionId);
+
+  revalidatePath("/admin");
+}
+
+// Sends a single offer to one worker for one open position, one wave at a
+// time - "do not blast every worker at once" per docs/PHASE1-DESIGN.md.
+export async function sendOfferAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = sendOfferSchema.safeParse({
+    positionId: String(formData.get("positionId") ?? ""),
+    workerProfileId: String(formData.get("workerProfileId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("A position and worker are required to send an offer.")}`);
+  }
+
+  try {
+    await sendOfferToWorker(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof DispatchForbiddenError || error instanceof InvalidDispatchStateError) {
       redirect(`/admin?error=${encodeURIComponent(error.message)}`);
     }
     throw error;
