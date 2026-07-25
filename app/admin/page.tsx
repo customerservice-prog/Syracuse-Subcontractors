@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
-import { approveContractorInterestAction, transitionApplicationAction } from "./actions";
+import {
+  approveContractorInterestAction,
+  transitionApplicationAction,
+  convertJobRequestAction,
+} from "./actions";
+import { listJobsForAdmin } from "@/lib/services/job.service";
 
 // Admin/dispatcher dashboard overview for Phase 1. This is intentionally a
 // read-heavy screen with a small number of high-value actions (approve a
-// contractor, move an application forward) rather than a full workspace -
-// dispatch, offers, and time approval land in later phases per
-// docs/PHASE1-DESIGN.md.
+// contractor, move an application forward, convert a job request into a
+// schedulable job) rather than a full workspace - matching/dispatch, offers,
+// and time approval land in later phases per docs/PHASE1-DESIGN.md.
 //
 // This page reads live, per-request data (auth session plus several DB
 // queries) and must never be statically prerendered at build time.
@@ -29,6 +34,7 @@ export default async function AdminPage({
     reviewApplications,
     activeWorkerCount,
     activeContractorCount,
+    jobs,
   ] = await Promise.all([
     db.contractorInterest.findMany({
       where: { contractor: null },
@@ -46,6 +52,7 @@ export default async function AdminPage({
     }),
     db.workerProfile.count({ where: { status: "ACTIVE" } }),
     db.contractor.count({ where: { status: "APPROVED" } }),
+    listJobsForAdmin(),
   ]);
 
   return (
@@ -132,8 +139,71 @@ export default async function AdminPage({
                   {request.requestedDate.toISOString().slice(0, 10)}, {request.requestedStartTime}-
                   {request.requestedEndTime} at {request.jobsiteAddress}
                 </p>
+                {request.notes ? <p className="mt-1 text-xs text-slate-500">{request.notes}</p> : null}
+
+                <form action={convertJobRequestAction} className="mt-3 grid gap-2 sm:grid-cols-4">
+                  <input type="hidden" name="jobRequestId" value={request.id} />
+                  <input
+                    name="workerPayRate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="Worker pay rate ($/hr)"
+                    className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    name="contractorBillRate"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    placeholder="Contractor bill rate ($/hr)"
+                    className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    name="supervisorName"
+                    placeholder="Supervisor name (optional)"
+                    className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+                  />
+                  <button
+                    type="submit"
+                    className="whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                  >
+                    Create job &amp; shifts
+                  </button>
+                </form>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Active jobs</h2>
+        {jobs.length === 0 ? (
+          <p className="text-sm text-slate-500">No jobs created yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {jobs.map((job) => {
+              const positions = job.shifts.flatMap((shift) => shift.positions);
+              const filledCount = positions.filter((p) => p.status === "FILLED").length;
+              return (
+                <div key={job.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-slate-900">
+                      {job.contractor.companyName} - {job.address}
+                    </p>
+                    <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
+                      {job.status.replace("_", " ").toLowerCase()}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {filledCount} / {positions.length} position(s) filled across {job.shifts.length} shift(s)
+                  </p>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
