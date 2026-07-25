@@ -5,14 +5,18 @@ import {
   approveContractorInterestAction,
   transitionApplicationAction,
   convertJobRequestAction,
+  findCandidatesAction,
+  sendOfferAction,
 } from "./actions";
 import { listJobsForAdmin } from "@/lib/services/job.service";
+import { listOpenPositionsForAdmin } from "@/lib/services/dispatch.service";
 
-// Admin/dispatcher dashboard overview for Phase 1. This is intentionally a
+// Admin/dispatcher dashboard overview for Phase 1/2. This is intentionally a
 // read-heavy screen with a small number of high-value actions (approve a
 // contractor, move an application forward, convert a job request into a
-// schedulable job) rather than a full workspace - matching/dispatch, offers,
-// and time approval land in later phases per docs/PHASE1-DESIGN.md.
+// schedulable job, run matching and send offers) rather than a full
+// workspace - time approval and invoicing land in later phases per
+// docs/PHASE1-DESIGN.md.
 //
 // This page reads live, per-request data (auth session plus several DB
 // queries) and must never be statically prerendered at build time.
@@ -35,6 +39,7 @@ export default async function AdminPage({
     activeWorkerCount,
     activeContractorCount,
     jobs,
+    openPositions,
   ] = await Promise.all([
     db.contractorInterest.findMany({
       where: { contractor: null },
@@ -53,6 +58,7 @@ export default async function AdminPage({
     db.workerProfile.count({ where: { status: "ACTIVE" } }),
     db.contractor.count({ where: { status: "APPROVED" } }),
     listJobsForAdmin(),
+    listOpenPositionsForAdmin(),
   ]);
 
   return (
@@ -173,6 +179,89 @@ export default async function AdminPage({
                     Create job &amp; shifts
                   </button>
                 </form>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Dispatch: open positions</h2>
+        <p className="text-sm text-slate-500">
+          Find eligible workers for an open position, then send an offer to one worker at a time - offers are never
+          blasted to every worker at once. If a worker declines, the next-ranked eligible candidate is offered
+          automatically.
+        </p>
+        {openPositions.length === 0 ? (
+          <p className="text-sm text-slate-500">No open or offered positions right now.</p>
+        ) : (
+          <div className="space-y-3">
+            {openPositions.map(({ position, latestRunGeneratedAt, topCandidates }) => (
+              <div key={position.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {position.shift.job.contractor.companyName} - {position.shift.job.address}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {position.shift.shiftDate.toISOString().slice(0, 10)}, {position.shift.startTime}-
+                      {position.shift.endTime}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
+                    {position.status.toLowerCase()}
+                  </span>
+                </div>
+
+                {position.requiredSkills.length > 0 ? (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Requires:{" "}
+                    {position.requiredSkills
+                      .map((r) => `${r.skill.name} (${r.minimumLevel.replace("_", " ").toLowerCase()}+)`)
+                      .join(", ")}
+                  </p>
+                ) : null}
+
+                {position.offers.length > 0 ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    {position.offers.length} offer(s) currently pending a worker response.
+                  </p>
+                ) : null}
+
+                <form action={findCandidatesAction} className="mt-3">
+                  <input type="hidden" name="positionId" value={position.id} />
+                  <button className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                    {latestRunGeneratedAt ? "Re-run matching" : "Find matching workers"}
+                  </button>
+                </form>
+
+                {topCandidates.length > 0 ? (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Top ranked candidates</p>
+                    {topCandidates.map((candidate) => (
+                      <div
+                        key={candidate.workerProfileId}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-100 bg-slate-50 px-3 py-2"
+                      >
+                        <p className="text-sm text-slate-700">
+                          #{candidate.rank} {candidate.name} - score {candidate.totalScore?.toFixed(2)}
+                          {candidate.alreadyOffered ? " (already offered)" : ""}
+                        </p>
+                        {!candidate.alreadyOffered ? (
+                          <form action={sendOfferAction}>
+                            <input type="hidden" name="positionId" value={position.id} />
+                            <input type="hidden" name="workerProfileId" value={candidate.workerProfileId} />
+                            <button className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700">
+                              Send offer
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : latestRunGeneratedAt ? (
+                  <p className="mt-2 text-xs text-slate-500">No eligible candidates found in the last matching run.</p>
+                ) : null}
               </div>
             ))}
           </div>
