@@ -208,3 +208,12 @@ export function canManageApplicationLifecycle(user: ActingUser): PolicyResult {
   }
   return deny("Only admins or dispatchers may transition an application's status.");
 }
+
+export function canManageCrews(user: ActingUser): PolicyResult {
+  if (isAdmin(user)) {
+    return allow(
+      "Admin/dispatcher roles may create crews and manage crew membership; crews are admin-managed in the MVP per docs/PHASE1-DESIGN.md."
+    );
+  }
+  return deny("Only admins or dispatchers may manage crews.");
+}
