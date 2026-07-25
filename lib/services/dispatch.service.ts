@@ -217,6 +217,56 @@ export async function declineOffer(actingUser: ActingUser, input: { offerId: str
   await autoReofferNextCandidate(offer.positionId);
 }
 
+// Sweeps offers whose response window has passed with no worker action.
+// This is the automated counterpart to declineOffer: an expired offer frees
+// up its position and triggers the same next-ranked-candidate auto-reoffer,
+// so an unresponsive worker never silently blocks a position forever -
+// "auto-reoffer to next qualified worker on decline/expiry" per
+// docs/PHASE1-DESIGN.md. Safe to call repeatedly and often (e.g. from the
+// scheduled /api/cron/expire-offers route, or opportunistically on admin
+// dashboard load) since it only touches offers that are actually past their
+// expiresAt.
+export async function expireStaleOffers() {
+  const staleOffers = await db.offer.findMany({
+    where: {
+      status: { in: ["SENT", "VIEWED"] },
+      expiresAt: { lt: new Date() },
+    },
+  });
+
+  for (const offer of staleOffers) {
+    await db.$transaction(async (tx) => {
+      await tx.offer.update({
+        where: { id: offer.id },
+        data: { status: "EXPIRED", expirationReason: "Offer window closed with no worker response." },
+      });
+      await tx.reliabilityEvent.create({
+        data: {
+          workerProfileId: offer.workerProfileId,
+          type: "OFFER_EXPIRED",
+          relatedOfferId: offer.id,
+        },
+      });
+      await tx.shiftPosition.update({
+        where: { id: offer.positionId },
+        data: { status: "OPEN" },
+      });
+      await tx.auditLog.create({
+        data: {
+          action: "EXPIRE_OFFER",
+          entityType: "Offer",
+          entityPublicId: offer.id,
+          reason: "Offer window closed with no worker response.",
+        },
+      });
+    });
+
+    await autoReofferNextCandidate(offer.positionId);
+  }
+
+  return { expiredCount: staleOffers.length };
+}
+
 async function autoReofferNextCandidate(positionId: string) {
   const position = await db.shiftPosition.findUnique({ where: { id: positionId } });
   if (!position || (position.status !== "OPEN" && position.status !== "OFFERED")) return;
