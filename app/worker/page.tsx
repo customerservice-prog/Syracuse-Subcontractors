@@ -2,14 +2,19 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
 import { getWorkerProfile } from "@/lib/services/worker.service";
-import { acceptOfferAction, declineOfferAction } from "./actions";
+import {
+  acceptOfferAction,
+  declineOfferAction,
+  checkInAction,
+  checkOutAction,
+} from "./actions";
 
-// Worker dashboard for Phase 1/2. Like the admin dashboard, this is
-// intentionally read-heavy for now - checking in/out and updating
-// availability land with the time-tracking phase per docs/PHASE1-DESIGN.md.
-// This page only ever shows a worker their OWN data; canViewWorkerProfile /
-// canRespondToOffer enforce that server-side, and being active here never
-// implies guaranteed hours.
+// Worker dashboard for Phase 1/2/3. Like the admin dashboard, this is
+// intentionally read-heavy for now - updating availability lands in a later
+// increment per docs/PHASE1-DESIGN.md. This page only ever shows a worker
+// their OWN data; canViewWorkerProfile / canRespondToOffer /
+// canCheckInOutAssignment enforce that server-side, and being active here
+// never implies guaranteed hours.
 export const dynamic = "force-dynamic";
 
 export default async function WorkerPage({
@@ -35,6 +40,7 @@ export default async function WorkerPage({
       },
       include: {
         position: { include: { shift: { include: { job: { include: { contractor: true } } } } } },
+        timeEntry: true,
       },
       orderBy: { createdAt: "desc" },
     }),
@@ -149,6 +155,28 @@ export default async function WorkerPage({
                   {assignment.position.shift.endTime} at {assignment.position.shift.job.address}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">Assignment status: {assignment.status.toLowerCase()}</p>
+
+                {!assignment.timeEntry ? (
+                  <form action={checkInAction} className="mt-3">
+                    <input type="hidden" name="assignmentId" value={assignment.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                      Check in
+                    </button>
+                  </form>
+                ) : assignment.timeEntry.status === "CHECKED_IN" ? (
+                  <form action={checkOutAction} className="mt-3">
+                    <input type="hidden" name="assignmentId" value={assignment.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                      Check out
+                    </button>
+                  </form>
+                ) : assignment.timeEntry.status === "PENDING_APPROVAL" ? (
+                  <p className="mt-3 text-xs font-medium text-amber-700">
+                    Checked out - your hours are awaiting approval.
+                  </p>
+                ) : assignment.timeEntry.status === "APPROVED" ? (
+                  <p className="mt-3 text-xs font-medium text-emerald-700">Hours approved.</p>
+                ) : null}
               </div>
             ))}
           </div>
