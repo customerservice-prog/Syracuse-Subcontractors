@@ -9,7 +9,7 @@ import {
   sendOfferAction,
 } from "./actions";
 import { listJobsForAdmin } from "@/lib/services/job.service";
-import { listOpenPositionsForAdmin } from "@/lib/services/dispatch.service";
+import { listOpenPositionsForAdmin, expireStaleOffers } from "@/lib/services/dispatch.service";
 
 // Admin/dispatcher dashboard overview for Phase 1/2. This is intentionally a
 // read-heavy screen with a small number of high-value actions (approve a
@@ -31,6 +31,13 @@ export default async function AdminPage({
   if (!actingUser || (actingUser.role !== "SUPER_ADMIN" && actingUser.role !== "DISPATCHER")) {
     redirect("/login");
   }
+
+  // Opportunistic sweep: until a real scheduler is wired up to
+  // /api/cron/expire-offers (see that route for details), expire any offers
+  // whose response window has passed whenever an admin loads this page, so
+  // stale offers don't silently block a position. Cheap no-op when nothing
+  // is stale.
+  await expireStaleOffers();
 
   const [
     pendingContractorInterests,
@@ -189,8 +196,8 @@ export default async function AdminPage({
         <h2 className="text-lg font-semibold text-slate-900">Dispatch: open positions</h2>
         <p className="text-sm text-slate-500">
           Find eligible workers for an open position, then send an offer to one worker at a time - offers are never
-          blasted to every worker at once. If a worker declines, the next-ranked eligible candidate is offered
-          automatically.
+          blasted to every worker at once. If a worker declines or an offer expires, the next-ranked eligible
+          candidate is offered automatically.
         </p>
         {openPositions.length === 0 ? (
           <p className="text-sm text-slate-500">No open or offered positions right now.</p>
