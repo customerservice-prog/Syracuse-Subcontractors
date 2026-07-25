@@ -9,7 +9,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     session: {
@@ -34,7 +34,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               return null;
             }
 
-            const user = await prisma.user.findUnique({
+            const user = await db.user.findUnique({
               where: { email: email.toLowerCase().trim() },
               include: {
                 contractorUser: true,
