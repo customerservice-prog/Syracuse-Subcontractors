@@ -3,6 +3,11 @@ import { brand } from "@/config/brand";
 import { applyAction } from "./actions";
 import type { Skill } from "@prisma/client";
 
+// This page reads live skill-category data from the database and must
+// never be statically prerendered at build time (no DATABASE_URL is
+// available during the build step).
+export const dynamic = "force-dynamic";
+
 export default async function ApplyPage({
   searchParams,
 }: {
