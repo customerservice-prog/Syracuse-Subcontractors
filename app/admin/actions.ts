@@ -24,9 +24,21 @@ import {
   ForbiddenError as TimeForbiddenError,
   InvalidTimeEntryStateError,
 } from "@/lib/services/time.service";
+import {
+  generateInvoiceForContractor,
+  addInvoiceAdjustment,
+  transitionInvoiceStatus,
+  ForbiddenError as InvoiceForbiddenError,
+  InvalidInvoiceStateError,
+} from "@/lib/services/invoice.service";
 import { convertJobRequestSchema } from "@/lib/validation/job.schema";
 import { findCandidatesSchema, sendOfferSchema } from "@/lib/validation/dispatch.schema";
 import { approveTimeEntrySchema } from "@/lib/validation/time.schema";
+import {
+  generateInvoiceSchema,
+  addInvoiceAdjustmentSchema,
+  transitionInvoiceStatusSchema,
+} from "@/lib/validation/invoice.schema";
 import type { ApplicationStatus } from "@prisma/client";
 
 async function requireAdmin() {
@@ -175,6 +187,83 @@ export async function approveTimeEntryAction(formData: FormData) {
     await approveTimeEntry(actingUser, parsed.data.timeEntryId);
   } catch (error) {
     if (error instanceof TimeForbiddenError || error instanceof InvalidTimeEntryStateError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Generates a single new DRAFT invoice from every approved, not-yet-invoiced
+// completed shift assignment for one contractor - see invoice.service.ts.
+export async function generateInvoiceAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = generateInvoiceSchema.safeParse({
+    contractorId: String(formData.get("contractorId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("A contractor is required to generate an invoice.")}`);
+  }
+
+  try {
+    await generateInvoiceForContractor(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof InvoiceForbiddenError || error instanceof InvalidInvoiceStateError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Adds a manual adjustment (fee, discount, correction) to a still-draft
+// invoice and recalculates its total.
+export async function addInvoiceAdjustmentAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = addInvoiceAdjustmentSchema.safeParse({
+    invoiceId: String(formData.get("invoiceId") ?? ""),
+    amount: formData.get("amount"),
+    reason: String(formData.get("reason") ?? ""),
+  });
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Please check the adjustment form and try again.";
+    redirect(`/admin?error=${encodeURIComponent(message)}`);
+  }
+
+  try {
+    await addInvoiceAdjustment(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof InvoiceForbiddenError || error instanceof InvalidInvoiceStateError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Moves an invoice to a new status (e.g. DRAFT -> SENT, SENT -> PAID). No
+// real payment is processed - PaymentRecord.provider defaults to "mock"
+// until a real payment provider is integrated, per docs/PHASE1-DESIGN.md.
+export async function transitionInvoiceStatusAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = transitionInvoiceStatusSchema.safeParse({
+    invoiceId: String(formData.get("invoiceId") ?? ""),
+    toStatus: String(formData.get("toStatus") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("An invoice and target status are required.")}`);
+  }
+
+  try {
+    await transitionInvoiceStatus(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof InvoiceForbiddenError || error instanceof InvalidInvoiceStateError) {
       redirect(`/admin?error=${encodeURIComponent(error.message)}`);
     }
     throw error;
