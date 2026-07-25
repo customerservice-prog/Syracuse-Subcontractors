@@ -31,6 +31,12 @@ import {
   ForbiddenError as InvoiceForbiddenError,
   InvalidInvoiceStateError,
 } from "@/lib/services/invoice.service";
+import {
+  createCrew,
+  addCrewMember,
+  removeCrewMember,
+  ForbiddenError as CrewForbiddenError,
+} from "@/lib/services/crew.service";
 import { convertJobRequestSchema } from "@/lib/validation/job.schema";
 import { findCandidatesSchema, sendOfferSchema } from "@/lib/validation/dispatch.schema";
 import { approveTimeEntrySchema } from "@/lib/validation/time.schema";
@@ -39,6 +45,11 @@ import {
   addInvoiceAdjustmentSchema,
   transitionInvoiceStatusSchema,
 } from "@/lib/validation/invoice.schema";
+import {
+  createCrewSchema,
+  addCrewMemberSchema,
+  removeCrewMemberSchema,
+} from "@/lib/validation/crew.schema";
 import type { ApplicationStatus } from "@prisma/client";
 
 async function requireAdmin() {
@@ -264,6 +275,82 @@ export async function transitionInvoiceStatusAction(formData: FormData) {
     await transitionInvoiceStatus(actingUser, parsed.data);
   } catch (error) {
     if (error instanceof InvoiceForbiddenError || error instanceof InvalidInvoiceStateError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Creates a new crew shell. Crews are admin-managed in the MVP - see
+// lib/services/crew.service.ts.
+export async function createCrewAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = createCrewSchema.safeParse({
+    name: String(formData.get("name") ?? ""),
+  });
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "Please enter a crew name.";
+    redirect(`/admin?error=${encodeURIComponent(message)}`);
+  }
+
+  try {
+    await createCrew(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof CrewForbiddenError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Adds a worker to a crew as a new, currently-active membership row.
+export async function addCrewMemberAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const rawRole = formData.get("role");
+  const parsed = addCrewMemberSchema.safeParse({
+    crewId: String(formData.get("crewId") ?? ""),
+    workerProfileId: String(formData.get("workerProfileId") ?? ""),
+    role: rawRole ? String(rawRole) : undefined,
+  });
+  if (!parsed.success) {
+    const message = parsed.error.issues[0]?.message ?? "A crew and worker are required.";
+    redirect(`/admin?error=${encodeURIComponent(message)}`);
+  }
+
+  try {
+    await addCrewMember(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof CrewForbiddenError) {
+      redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin");
+}
+
+// Ends a crew membership (status -> ENDED) rather than deleting it, so
+// membership history is preserved.
+export async function removeCrewMemberAction(formData: FormData) {
+  const actingUser = await requireAdmin();
+
+  const parsed = removeCrewMemberSchema.safeParse({
+    crewMembershipId: String(formData.get("crewMembershipId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin?error=${encodeURIComponent("A crew membership is required.")}`);
+  }
+
+  try {
+    await removeCrewMember(actingUser, parsed.data);
+  } catch (error) {
+    if (error instanceof CrewForbiddenError) {
       redirect(`/admin?error=${encodeURIComponent(error.message)}`);
     }
     throw error;
