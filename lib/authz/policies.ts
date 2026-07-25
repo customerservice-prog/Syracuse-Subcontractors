@@ -85,6 +85,16 @@ export function canRespondToOffer(
   return deny("Only the offered worker may accept or decline this offer.");
 }
 
+export function canCheckInOutAssignment(
+  user: ActingUser,
+  target: { workerProfileId: string }
+): PolicyResult {
+  if (user.role === "WORKER" && user.workerProfileId === target.workerProfileId) {
+    return allow("Workers may check in and out of their own shift assignments.");
+  }
+  return deny("Only the assigned worker may check in or out of this shift assignment.");
+}
+
 export function canApproveTimeEntry(
   user: ActingUser,
   target: { contractorId: string }
