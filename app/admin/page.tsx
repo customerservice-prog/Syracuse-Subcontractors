@@ -7,15 +7,17 @@ import {
   convertJobRequestAction,
   findCandidatesAction,
   sendOfferAction,
+  approveTimeEntryAction,
 } from "./actions";
 import { listJobsForAdmin } from "@/lib/services/job.service";
 import { listOpenPositionsForAdmin, expireStaleOffers } from "@/lib/services/dispatch.service";
+import { listTimeEntriesAwaitingApproval } from "@/lib/services/time.service";
 
-// Admin/dispatcher dashboard overview for Phase 1/2. This is intentionally a
-// read-heavy screen with a small number of high-value actions (approve a
+// Admin/dispatcher dashboard overview for Phase 1/2/3. This is intentionally
+// a read-heavy screen with a small number of high-value actions (approve a
 // contractor, move an application forward, convert a job request into a
-// schedulable job, run matching and send offers) rather than a full
-// workspace - time approval and invoicing land in later phases per
+// schedulable job, run matching and send offers, approve worked hours)
+// rather than a full workspace - invoicing lands in a later phase per
 // docs/PHASE1-DESIGN.md.
 //
 // This page reads live, per-request data (auth session plus several DB
@@ -47,6 +49,7 @@ export default async function AdminPage({
     activeContractorCount,
     jobs,
     openPositions,
+    timeEntriesAwaitingApproval,
   ] = await Promise.all([
     db.contractorInterest.findMany({
       where: { contractor: null },
@@ -66,6 +69,7 @@ export default async function AdminPage({
     db.contractor.count({ where: { status: "APPROVED" } }),
     listJobsForAdmin(),
     listOpenPositionsForAdmin(),
+    listTimeEntriesAwaitingApproval(),
   ]);
 
   return (
@@ -271,6 +275,49 @@ export default async function AdminPage({
                 ) : null}
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Hours awaiting approval</h2>
+        <p className="text-sm text-slate-500">
+          Workers have checked out of these shifts. Approve worked hours to mark the assignment complete and record
+          a positive reliability event; approving is never automatic.
+        </p>
+        {timeEntriesAwaitingApproval.length === 0 ? (
+          <p className="text-sm text-slate-500">No hours are currently awaiting approval.</p>
+        ) : (
+          <div className="space-y-3">
+            {timeEntriesAwaitingApproval.map(({ timeEntry, hoursWorked }) => {
+              const application = timeEntry.assignment.workerProfile.application;
+              const job = timeEntry.assignment.position.shift.job;
+              return (
+                <div key={timeEntry.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {application.firstName} {application.lastName} - {job.contractor.companyName}
+                      </p>
+                      <p className="text-sm text-slate-600">{job.address}</p>
+                    </div>
+                    <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
+                      {hoursWorked !== null ? `${hoursWorked.toFixed(2)} hrs` : "hours unknown"}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Checked in {timeEntry.checkInServerAt?.toISOString().slice(0, 16).replace("T", " ")} - checked out{" "}
+                    {timeEntry.checkOutServerAt?.toISOString().slice(0, 16).replace("T", " ")}
+                  </p>
+                  <form action={approveTimeEntryAction} className="mt-3">
+                    <input type="hidden" name="timeEntryId" value={timeEntry.id} />
+                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                      Approve hours
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
