@@ -10,6 +10,13 @@ import {
   InvalidDispatchStateError,
 } from "@/lib/services/dispatch.service";
 import { respondToOfferSchema } from "@/lib/validation/dispatch.schema";
+import {
+  checkIn,
+  checkOut,
+  ForbiddenError as TimeForbiddenError,
+  InvalidTimeEntryStateError,
+} from "@/lib/services/time.service";
+import { checkInSchema, checkOutSchema } from "@/lib/validation/time.schema";
 
 async function requireWorker() {
   const actingUser = await getActingUser();
@@ -63,6 +70,57 @@ export async function declineOfferAction(formData: FormData) {
     await declineOffer(actingUser, parsed.data);
   } catch (error) {
     if (error instanceof ForbiddenError || error instanceof InvalidDispatchStateError) {
+      redirect(`/worker?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/worker");
+}
+
+// Worker checks in to a confirmed shift assignment. Phase 1 MVP is a manual
+// tap-to-check-in; GPS/geofence/QR verification is scaffolded in the
+// TimeEntry schema but not yet enforced - see lib/services/time.service.ts.
+export async function checkInAction(formData: FormData) {
+  const actingUser = await requireWorker();
+
+  const parsed = checkInSchema.safeParse({
+    assignmentId: String(formData.get("assignmentId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/worker?error=${encodeURIComponent("A shift assignment is required to check in.")}`);
+  }
+
+  try {
+    await checkIn(actingUser, parsed.data.assignmentId);
+  } catch (error) {
+    if (error instanceof TimeForbiddenError || error instanceof InvalidTimeEntryStateError) {
+      redirect(`/worker?error=${encodeURIComponent(error.message)}`);
+    }
+    throw error;
+  }
+
+  revalidatePath("/worker");
+}
+
+// Worker checks out of an active shift assignment. This moves the time entry
+// to PENDING_APPROVAL - hours are never auto-approved; an admin (or
+// eventually the owning contractor's staff) must approve them before the
+// assignment is marked COMPLETED.
+export async function checkOutAction(formData: FormData) {
+  const actingUser = await requireWorker();
+
+  const parsed = checkOutSchema.safeParse({
+    assignmentId: String(formData.get("assignmentId") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/worker?error=${encodeURIComponent("A shift assignment is required to check out.")}`);
+  }
+
+  try {
+    await checkOut(actingUser, parsed.data.assignmentId);
+  } catch (error) {
+    if (error instanceof TimeForbiddenError || error instanceof InvalidTimeEntryStateError) {
       redirect(`/worker?error=${encodeURIComponent(error.message)}`);
     }
     throw error;
