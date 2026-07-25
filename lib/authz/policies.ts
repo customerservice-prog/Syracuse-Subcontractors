@@ -75,6 +75,16 @@ export function canDispatchPosition(
   return deny("Only admins or dispatchers may send offers or dispatch a shift position.");
 }
 
+export function canRespondToOffer(
+  user: ActingUser,
+  target: { workerProfileId: string }
+): PolicyResult {
+  if (user.role === "WORKER" && user.workerProfileId === target.workerProfileId) {
+    return allow("Workers may accept or decline their own offers.");
+  }
+  return deny("Only the offered worker may accept or decline this offer.");
+}
+
 export function canApproveTimeEntry(
   user: ActingUser,
   target: { contractorId: string }
