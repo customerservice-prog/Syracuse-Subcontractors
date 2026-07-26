@@ -83,6 +83,17 @@ const saltCityOwnerUser = await prisma.user.upsert({
   },
 });
 
+const platformAdminUser = await prisma.user.upsert({
+  where: { email: "admin@syracuselabor-dev.test" },
+  update: {},
+  create: {
+    email: "admin@syracuselabor-dev.test",
+    passwordHash: DEV_PASSWORD_HASH,
+    role: "SUPER_ADMIN",
+    status: "ACTIVE",
+  },
+});
+
 const saltCity = await prisma.contractor.upsert({
   where: { id: "seed-contractor-salt-city" },
   update: {},
