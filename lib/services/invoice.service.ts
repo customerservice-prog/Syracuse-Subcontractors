@@ -8,6 +8,7 @@ import type {
   TransitionInvoiceStatusInput,
 } from "@/lib/validation/invoice.schema";
 import type { InvoiceStatus } from "@prisma/client";
+import { notify, getContractorUserRecipients } from "@/lib/services/notification.service";
 
 export class ForbiddenError extends Error {}
 export class InvalidInvoiceStateError extends Error {}
@@ -37,6 +38,8 @@ const ALLOWED_INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
 // auto-sent. No real payment processing happens here - see
 // docs/PHASE1-DESIGN.md's "scaffold Stripe cleanly, do not process real
 // payments yet" requirement; PaymentRecord.provider defaults to "mock".
+// Notifies the contractor's users so the "invoice created" event from the
+// notification list is real from day one.
 export async function generateInvoiceForContractor(
   actingUser: ActingUser,
   input: GenerateInvoiceInput
@@ -73,7 +76,7 @@ export async function generateInvoiceForContractor(
     );
   }
 
-  return db.$transaction(async (tx) => {
+  const invoice = await db.$transaction(async (tx) => {
     const invoiceCount = await tx.invoice.count();
     const invoiceNumber = `INV-${String(invoiceCount + 1).padStart(5, "0")}`;
 
@@ -109,7 +112,7 @@ export async function generateInvoiceForContractor(
       new Prisma.Decimal(0)
     );
 
-    const invoice = await tx.invoice.create({
+    const created = await tx.invoice.create({
       data: {
         invoiceNumber,
         contractorId: input.contractorId,
@@ -121,7 +124,7 @@ export async function generateInvoiceForContractor(
     });
 
     await tx.invoiceStatusHistory.create({
-      data: { invoiceId: invoice.id, toStatus: "DRAFT" },
+      data: { invoiceId: created.id, toStatus: "DRAFT" },
     });
 
     await tx.auditLog.create({
@@ -130,16 +133,26 @@ export async function generateInvoiceForContractor(
         actorRole: actingUser.role,
         action: "GENERATE_INVOICE",
         entityType: "Invoice",
-        entityPublicId: invoice.id,
+        entityPublicId: created.id,
         reason: `Generated from ${assignments.length} approved shift assignment(s).`,
       },
     });
 
     return tx.invoice.findUniqueOrThrow({
-      where: { id: invoice.id },
+      where: { id: created.id },
       include: { lineItems: true },
     });
   });
+
+  await notify({
+    type: "INVOICE_CREATED",
+    entityType: "Invoice",
+    entityId: invoice.id,
+    payload: { invoiceNumber: invoice.invoiceNumber, total: invoice.total.toString() },
+    recipients: await getContractorUserRecipients(input.contractorId),
+  });
+
+  return invoice;
 }
 
 // Adds a manual adjustment (fee, discount, correction) to a still-DRAFT
