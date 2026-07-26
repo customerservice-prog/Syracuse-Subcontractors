@@ -6,6 +6,7 @@ import type {
   JobRequestInput,
   ContractorApprovalInput,
 } from "@/lib/validation/contractor.schema";
+import { notify, getAdminRecipients } from "@/lib/services/notification.service";
 
 export class ForbiddenError extends Error {}
 
@@ -16,7 +17,7 @@ export async function submitContractorInterest(input: ContractorInterestInput) {
 export async function approveContractorInterest(
   actingUser: ActingUser,
   input: ContractorApprovalInput
-  ) {
+) {
   const policyResult = canApproveContractor(actingUser, { contractorId: input.contractorInterestId });
   if (!policyResult.allowed) {
     throw new ForbiddenError(policyResult.reason);
@@ -52,12 +53,17 @@ export async function approveContractorInterest(
   });
 }
 
+// Records a new job request for dispatcher review, then notifies every
+// admin/dispatcher so the "new worker request"-style event from
+// docs/PHASE1-DESIGN.md's notification list is real from day one - the
+// email/SMS providers are mock (log-only) until real credentials are
+// configured, but the event/recipient/delivery-attempt records are not.
 export async function submitJobRequest(actingUser: ActingUser, input: JobRequestInput) {
   const policyResult = canViewJobRequest(actingUser, { contractorId: input.contractorId });
   if (!policyResult.allowed) {
     throw new ForbiddenError(policyResult.reason);
   }
-  return db.jobRequest.create({
+  const jobRequest = await db.jobRequest.create({
     data: {
       contractorId: input.contractorId,
       jobType: input.jobType,
@@ -70,6 +76,16 @@ export async function submitJobRequest(actingUser: ActingUser, input: JobRequest
       status: "SUBMITTED",
     },
   });
+
+  await notify({
+    type: "NEW_JOB_REQUEST",
+    entityType: "JobRequest",
+    entityId: jobRequest.id,
+    payload: { contractorId: input.contractorId, jobType: input.jobType },
+    recipients: await getAdminRecipients(),
+  });
+
+  return jobRequest;
 }
 
 export async function updateContractorRecord(
@@ -79,7 +95,7 @@ export async function updateContractorRecord(
     companyName?: string;
     status?: "LEAD" | "PENDING_REVIEW" | "APPROVED" | "SUSPENDED" | "REJECTED";
   }
-  ) {
+) {
   const policyResult = canModifyContractor(actingUser, { contractorId: input.contractorId });
   if (!policyResult.allowed) {
     throw new ForbiddenError(policyResult.reason);
