@@ -1,17 +1,19 @@
 import { db } from "@/lib/db";
 import type { ActingUser } from "@/lib/authz/policies";
 import { canDispatchPosition, canRespondToOffer } from "@/lib/authz/policies";
+import { notify, getAdminRecipients } from "@/lib/services/notification.service";
 
 export class ForbiddenError extends Error {}
 export class InvalidDispatchStateError extends Error {}
 
 const OFFER_WINDOW_HOURS = 2;
 
-// Creates the actual Offer row plus its position/notification side effects.
-// This is intentionally NOT policy-checked or exported - it is the shared
-// mechanics used both by the admin-triggered sendOfferToWorker (which does
-// check the dispatch policy) and by the automated auto-reoffer-on-decline
-// path (which is a system action, not a direct user request).
+// Creates the actual Offer row plus its position side effect, then notifies
+// the offered worker. This is intentionally NOT policy-checked or exported -
+// it is the shared mechanics used both by the admin-triggered
+// sendOfferToWorker (which does check the dispatch policy) and by the
+// automated auto-reoffer-on-decline path (which is a system action, not a
+// direct user request).
 async function createOfferRecord(input: {
   positionId: string;
   workerProfileId: string;
@@ -19,8 +21,8 @@ async function createOfferRecord(input: {
 }) {
   const expiresAt = new Date(Date.now() + OFFER_WINDOW_HOURS * 60 * 60 * 1000);
 
-  return db.$transaction(async (tx) => {
-    const offer = await tx.offer.create({
+  const offer = await db.$transaction(async (tx) => {
+    const created = await tx.offer.create({
       data: {
         positionId: input.positionId,
         workerProfileId: input.workerProfileId,
@@ -38,20 +40,18 @@ async function createOfferRecord(input: {
       data: { status: "OFFERED" },
     });
 
-    const event = await tx.notificationEvent.create({
-      data: {
-        type: "JOB_OFFER",
-        entityType: "Offer",
-        entityId: offer.id,
-        payload: { positionId: input.positionId, waveNumber: input.waveNumber },
-      },
-    });
-    await tx.notificationRecipient.create({
-      data: { eventId: event.id, workerProfileId: input.workerProfileId },
-    });
-
-    return offer;
+    return created;
   });
+
+  await notify({
+    type: "JOB_OFFER",
+    entityType: "Offer",
+    entityId: offer.id,
+    payload: { positionId: input.positionId, waveNumber: input.waveNumber },
+    recipients: [{ workerProfileId: input.workerProfileId }],
+  });
+
+  return offer;
 }
 
 // Runs matching and returns ranked candidates for an admin/dispatcher to
@@ -107,7 +107,8 @@ export async function sendOfferToWorker(
 // supersedes any other pending offers on the same position, and records a
 // positive reliability event. Pay/bill rates are snapshotted from the
 // position onto the assignment per docs/PHASE1-DESIGN.md, so later rate
-// changes never retroactively affect this assignment.
+// changes never retroactively affect this assignment. Admins/dispatchers are
+// notified so the "offer accepted" event from the notification list is real.
 export async function acceptOffer(actingUser: ActingUser, offerId: string) {
   const offer = await db.offer.findUniqueOrThrow({
     where: { id: offerId },
@@ -125,7 +126,7 @@ export async function acceptOffer(actingUser: ActingUser, offerId: string) {
     throw new InvalidDispatchStateError("This offer has expired.");
   }
 
-  return db.$transaction(async (tx) => {
+  const assignment = await db.$transaction(async (tx) => {
     await tx.offer.update({
       where: { id: offerId },
       data: { status: "ACCEPTED", respondedAt: new Date() },
@@ -140,7 +141,7 @@ export async function acceptOffer(actingUser: ActingUser, offerId: string) {
       data: { status: "POSITION_FILLED", respondedAt: new Date() },
     });
 
-    const assignment = await tx.shiftAssignment.create({
+    const created = await tx.shiftAssignment.create({
       data: {
         positionId: offer.positionId,
         workerProfileId: offer.workerProfileId,
@@ -160,7 +161,7 @@ export async function acceptOffer(actingUser: ActingUser, offerId: string) {
         workerProfileId: offer.workerProfileId,
         type: "OFFER_ACCEPTED",
         relatedOfferId: offer.id,
-        relatedAssignmentId: assignment.id,
+        relatedAssignmentId: created.id,
       },
     });
 
@@ -174,16 +175,27 @@ export async function acceptOffer(actingUser: ActingUser, offerId: string) {
       },
     });
 
-    return assignment;
+    return created;
   });
+
+  await notify({
+    type: "OFFER_ACCEPTED",
+    entityType: "Offer",
+    entityId: offer.id,
+    payload: { positionId: offer.positionId, workerProfileId: offer.workerProfileId },
+    recipients: await getAdminRecipients(),
+  });
+
+  return assignment;
 }
 
 // Worker declines an offer. Records a reliability event, reopens the
-// position, and automatically re-offers to the next-ranked eligible
-// candidate from the same matching run who has not already been offered
-// this position - "auto-reoffer to next qualified worker on decline/expiry"
-// per docs/PHASE1-DESIGN.md. If no further eligible candidates remain, the
-// position simply stays OPEN for a fresh matching run.
+// position, notifies admins/dispatchers, and automatically re-offers to the
+// next-ranked eligible candidate from the same matching run who has not
+// already been offered this position - "auto-reoffer to next qualified
+// worker on decline/expiry" per docs/PHASE1-DESIGN.md. If no further
+// eligible candidates remain, the position simply stays OPEN for a fresh
+// matching run.
 export async function declineOffer(actingUser: ActingUser, input: { offerId: string; reason?: string }) {
   const offer = await db.offer.findUniqueOrThrow({ where: { id: input.offerId } });
 
@@ -214,18 +226,26 @@ export async function declineOffer(actingUser: ActingUser, input: { offerId: str
     });
   });
 
+  await notify({
+    type: "OFFER_DECLINED",
+    entityType: "Offer",
+    entityId: offer.id,
+    payload: { positionId: offer.positionId, reason: input.reason },
+    recipients: await getAdminRecipients(),
+  });
+
   await autoReofferNextCandidate(offer.positionId);
 }
 
 // Sweeps offers whose response window has passed with no worker action.
 // This is the automated counterpart to declineOffer: an expired offer frees
-// up its position and triggers the same next-ranked-candidate auto-reoffer,
-// so an unresponsive worker never silently blocks a position forever -
-// "auto-reoffer to next qualified worker on decline/expiry" per
-// docs/PHASE1-DESIGN.md. Safe to call repeatedly and often (e.g. from the
-// scheduled /api/cron/expire-offers route, or opportunistically on admin
-// dashboard load) since it only touches offers that are actually past their
-// expiresAt.
+// up its position, notifies admins/dispatchers, and triggers the same
+// next-ranked-candidate auto-reoffer, so an unresponsive worker never
+// silently blocks a position forever - "auto-reoffer to next qualified
+// worker on decline/expiry" per docs/PHASE1-DESIGN.md. Safe to call
+// repeatedly and often (e.g. from the scheduled /api/cron/expire-offers
+// route, or opportunistically on admin dashboard load) since it only
+// touches offers that are actually past their expiresAt.
 export async function expireStaleOffers() {
   const staleOffers = await db.offer.findMany({
     where: {
@@ -259,6 +279,14 @@ export async function expireStaleOffers() {
           reason: "Offer window closed with no worker response.",
         },
       });
+    });
+
+    await notify({
+      type: "OFFER_EXPIRED",
+      entityType: "Offer",
+      entityId: offer.id,
+      payload: { positionId: offer.positionId },
+      recipients: await getAdminRecipients(),
     });
 
     await autoReofferNextCandidate(offer.positionId);
