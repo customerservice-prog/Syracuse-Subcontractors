@@ -23,6 +23,7 @@ import {
   listInvoicesForAdmin,
 } from "@/lib/services/invoice.service";
 import { listCrewsForAdmin, listActiveWorkersForCrewAssignment } from "@/lib/services/crew.service";
+import { listRecentNotificationsForAdmin } from "@/lib/services/notification.service";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,7 @@ export default async function AdminPage({
     invoices,
     crews,
     activeWorkersForCrewAssignment,
+    recentNotifications,
   ] = await Promise.all([
     db.contractorInterest.findMany({
       where: { contractor: null },
@@ -85,6 +87,7 @@ export default async function AdminPage({
     listInvoicesForAdmin(),
     listCrewsForAdmin(),
     listActiveWorkersForCrewAssignment(),
+    listRecentNotificationsForAdmin(),
   ]);
 
   return (
@@ -471,6 +474,46 @@ export default async function AdminPage({
         )}
       </section>
 
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">Recent notifications</h2>
+        <p className="text-sm text-slate-500">
+          Every dispatch, hours, and invoice event creates a notification record with a full delivery history.
+          Email/SMS providers are mock (log-only) until real credentials are configured.
+        </p>
+        {recentNotifications.length === 0 ? (
+          <p className="text-sm text-slate-500">No notifications recorded yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {recentNotifications.map((event) => {
+              const attempts = event.recipients.flatMap((r) => r.deliveryAttempts);
+              return (
+                <div key={event.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-slate-900">{event.type.replace(/_/g, " ")}</p>
+                    <span className="text-xs text-slate-500">
+                      {event.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {event.entityType} - {event.recipients.length} recipient(s)
+                  </p>
+                  {attempts.length > 0 ? (
+                    <div className="mt-1 space-y-0.5">
+                      {attempts.map((attempt) => (
+                        <p key={attempt.id} className="text-xs text-slate-500">
+                          {attempt.channel}: {attempt.status.toLowerCase()}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-400">No delivery attempts recorded (no contact info on file).</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Crews</h2>
         <p className="text-sm text-slate-500">
