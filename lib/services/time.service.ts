@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { ActingUser } from "@/lib/authz/policies";
 import { canCheckInOutAssignment, canApproveTimeEntry } from "@/lib/authz/policies";
+import { notify, getAdminRecipients } from "@/lib/services/notification.service";
 
 export class ForbiddenError extends Error {}
 export class InvalidTimeEntryStateError extends Error {}
@@ -63,7 +64,9 @@ export async function checkIn(actingUser: ActingUser, assignmentId: string) {
 // Worker check-out from an active shift assignment. Moves the time entry to
 // PENDING_APPROVAL - hours are never auto-approved; an admin or the owning
 // contractor's staff must approve them (see approveTimeEntry below), per the
-// "approve hours" requirement in docs/PHASE1-DESIGN.md.
+// "approve hours" requirement in docs/PHASE1-DESIGN.md. Admins/dispatchers
+// are notified so the "hours awaiting approval" event from the notification
+// list is real from day one.
 export async function checkOut(actingUser: ActingUser, assignmentId: string) {
   const assignment = await db.shiftAssignment.findUniqueOrThrow({
     where: { id: assignmentId },
@@ -78,9 +81,9 @@ export async function checkOut(actingUser: ActingUser, assignmentId: string) {
     throw new InvalidTimeEntryStateError("This assignment does not have an active check-in to check out of.");
   }
 
-  return db.$transaction(async (tx) => {
+  const timeEntry = await db.$transaction(async (tx) => {
     const now = new Date();
-    const timeEntry = await tx.timeEntry.update({
+    const updated = await tx.timeEntry.update({
       where: { id: assignment.timeEntry!.id },
       data: {
         status: "PENDING_APPROVAL",
@@ -95,12 +98,22 @@ export async function checkOut(actingUser: ActingUser, assignmentId: string) {
         actorRole: actingUser.role,
         action: "CHECK_OUT",
         entityType: "TimeEntry",
-        entityPublicId: timeEntry.id,
+        entityPublicId: updated.id,
       },
     });
 
-    return timeEntry;
+    return updated;
   });
+
+  await notify({
+    type: "HOURS_AWAITING_APPROVAL",
+    entityType: "TimeEntry",
+    entityId: timeEntry.id,
+    payload: { assignmentId },
+    recipients: await getAdminRecipients(),
+  });
+
+  return timeEntry;
 }
 
 // Admin/dispatcher (or eventually the owning contractor's staff) approves
