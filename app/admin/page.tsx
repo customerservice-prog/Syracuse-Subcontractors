@@ -39,6 +39,13 @@ const INVOICE_NEXT_STATUSES: Record<string, string[]> = {
   VOID: [],
 };
 
+const GEOFENCE_ADMIN_LABELS: Record<string, string> = {
+  WITHIN_RANGE: "on-site (verified)",
+  OUT_OF_RANGE: "outside expected radius",
+  NO_JOB_LOCATION: "jobsite location not on file",
+  LOCATION_UNAVAILABLE: "location unavailable",
+};
+
 export default async function AdminPage({
   searchParams,
 }: {
@@ -296,7 +303,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Hours awaiting approval</h2>
         <p className="text-sm text-slate-500">
@@ -327,6 +333,14 @@ export default async function AdminPage({
                     Checked in {timeEntry.checkInServerAt?.toISOString().slice(0, 16).replace("T", " ")} - checked out{" "}
                     {timeEntry.checkOutServerAt?.toISOString().slice(0, 16).replace("T", " ")}
                   </p>
+                  {timeEntry.geofenceResult ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Check-in location: {GEOFENCE_ADMIN_LABELS[timeEntry.geofenceResult] ?? timeEntry.geofenceResult.toLowerCase()}
+                      {timeEntry.checkInLat !== null && timeEntry.checkInLng !== null
+                        ? ` (${timeEntry.checkInLat.toFixed(4)}, ${timeEntry.checkInLng.toFixed(4)})`
+                        : ""}
+                    </p>
+                  ) : null}
                   <form action={approveTimeEntryAction} className="mt-3">
                     <input type="hidden" name="timeEntryId" value={timeEntry.id} />
                     <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
@@ -339,7 +353,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Generate invoices</h2>
         <p className="text-sm text-slate-500">
@@ -610,7 +623,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Applications to review</h2>
         {reviewApplications.length === 0 ? (
