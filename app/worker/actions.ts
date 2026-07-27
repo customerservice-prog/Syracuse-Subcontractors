@@ -79,20 +79,34 @@ export async function declineOfferAction(formData: FormData) {
 }
 
 // Worker checks in to a confirmed shift assignment. Phase 1 MVP is a manual
-// tap-to-check-in; GPS/geofence/QR verification is scaffolded in the
-// TimeEntry schema but not yet enforced - see lib/services/time.service.ts.
+// tap-to-check-in; lat/lng/accuracy are optional and populated client-side
+// from the browser Geolocation API (see app/worker/check-in-out-button.tsx)
+// - a missing or denied location never blocks check-in, the service layer
+// just records it as LOCATION_UNAVAILABLE. See lib/services/time.service.ts
+// for the geofence evaluation itself.
 export async function checkInAction(formData: FormData) {
   const actingUser = await requireWorker();
 
+  const rawLat = formData.get("lat");
+  const rawLng = formData.get("lng");
+  const rawAccuracy = formData.get("accuracy");
+
   const parsed = checkInSchema.safeParse({
     assignmentId: String(formData.get("assignmentId") ?? ""),
+    lat: rawLat ? Number(rawLat) : undefined,
+    lng: rawLng ? Number(rawLng) : undefined,
+    accuracy: rawAccuracy ? Number(rawAccuracy) : undefined,
   });
   if (!parsed.success) {
     redirect(`/worker?error=${encodeURIComponent("A shift assignment is required to check in.")}`);
   }
 
   try {
-    await checkIn(actingUser, parsed.data.assignmentId);
+    await checkIn(actingUser, parsed.data.assignmentId, {
+      lat: parsed.data.lat,
+      lng: parsed.data.lng,
+      accuracy: parsed.data.accuracy,
+    });
   } catch (error) {
     if (error instanceof TimeForbiddenError || error instanceof InvalidTimeEntryStateError) {
       redirect(`/worker?error=${encodeURIComponent(error.message)}`);
@@ -106,19 +120,28 @@ export async function checkInAction(formData: FormData) {
 // Worker checks out of an active shift assignment. This moves the time entry
 // to PENDING_APPROVAL - hours are never auto-approved; an admin (or
 // eventually the owning contractor's staff) must approve them before the
-// assignment is marked COMPLETED.
+// assignment is marked COMPLETED. lat/lng are optional and recorded
+// alongside the check-in location for a fuller audit trail.
 export async function checkOutAction(formData: FormData) {
   const actingUser = await requireWorker();
 
+  const rawLat = formData.get("lat");
+  const rawLng = formData.get("lng");
+
   const parsed = checkOutSchema.safeParse({
     assignmentId: String(formData.get("assignmentId") ?? ""),
+    lat: rawLat ? Number(rawLat) : undefined,
+    lng: rawLng ? Number(rawLng) : undefined,
   });
   if (!parsed.success) {
     redirect(`/worker?error=${encodeURIComponent("A shift assignment is required to check out.")}`);
   }
 
   try {
-    await checkOut(actingUser, parsed.data.assignmentId);
+    await checkOut(actingUser, parsed.data.assignmentId, {
+      lat: parsed.data.lat,
+      lng: parsed.data.lng,
+    });
   } catch (error) {
     if (error instanceof TimeForbiddenError || error instanceof InvalidTimeEntryStateError) {
       redirect(`/worker?error=${encodeURIComponent(error.message)}`);
