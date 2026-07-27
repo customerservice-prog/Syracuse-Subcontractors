@@ -6,18 +6,60 @@ import { notify, getAdminRecipients } from "@/lib/services/notification.service"
 export class ForbiddenError extends Error {}
 export class InvalidTimeEntryStateError extends Error {}
 
-// Worker check-in for a confirmed shift assignment. Phase 1 MVP is manual
-// check-in only (a single tap on the worker dashboard) - the TimeEntry model
-// already has GPS/geofence/QR columns (checkInLat, checkInLng,
-// geofenceRadiusMeters, geofenceResult, qrValidationResult) so real
-// GPS-verified or QR-code check-in can be layered on later without a schema
-// change, per docs/PHASE1-DESIGN.md. Device and server timestamps are both
+// MVP default geofence radius used until a per-job or per-position radius
+// setting is exposed in the UI - the schema's geofenceRadiusMeters column on
+// TimeEntry already supports a per-entry value, this is just the constant
+// used to populate it today.
+const DEFAULT_GEOFENCE_RADIUS_METERS = 300;
+
+export type GeoInput = { lat?: number; lng?: number; accuracy?: number };
+
+// Standard great-circle distance between two lat/lng points, in meters.
+function haversineDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
+// Compares a captured browser location against the job's site coordinates.
+// Never blocks check-in - a missing location or missing job coordinates is
+// simply recorded as a distinct result so admins can see why a check-in
+// wasn't location-verified, rather than silently failing. This is the "GPS
+// geofence verification" scaffold called out in docs/PHASE1-DESIGN.md,
+// layered on top of the existing manual-tap check-in flow.
+function evaluateGeofence(
+  geo: GeoInput | undefined,
+  jobLat: number | null,
+  jobLng: number | null
+): { result: string; radiusMeters: number } {
+  const radiusMeters = DEFAULT_GEOFENCE_RADIUS_METERS;
+  if (!geo || geo.lat === undefined || geo.lng === undefined) {
+    return { result: "LOCATION_UNAVAILABLE", radiusMeters };
+  }
+  if (jobLat === null || jobLng === null) {
+    return { result: "NO_JOB_LOCATION", radiusMeters };
+  }
+  const distanceMeters = haversineDistanceMeters(geo.lat, geo.lng, jobLat, jobLng);
+  return { result: distanceMeters <= radiusMeters ? "WITHIN_RANGE" : "OUT_OF_RANGE", radiusMeters };
+}
+
+// Worker check-in for a confirmed shift assignment. Phase 1 MVP is a manual
+// check-in (a single tap on the worker dashboard) with an optional
+// browser-captured GPS location layered on top - a missing or denied
+// location never blocks check-in, it is just recorded as
+// LOCATION_UNAVAILABLE so this degrades gracefully on devices/browsers
+// without geolocation support. Device and server timestamps are both
 // recorded from day one so a future device-vs-server clock mismatch can be
 // audited.
-export async function checkIn(actingUser: ActingUser, assignmentId: string) {
+export async function checkIn(actingUser: ActingUser, assignmentId: string, geo?: GeoInput) {
   const assignment = await db.shiftAssignment.findUniqueOrThrow({
     where: { id: assignmentId },
-    include: { timeEntry: true },
+    include: { timeEntry: true, position: { include: { shift: { include: { job: true } } } } },
   });
 
   const policyResult = canCheckInOutAssignment(actingUser, { workerProfileId: assignment.workerProfileId });
@@ -31,6 +73,9 @@ export async function checkIn(actingUser: ActingUser, assignmentId: string) {
     throw new InvalidTimeEntryStateError("A time entry already exists for this assignment.");
   }
 
+  const job = assignment.position.shift.job;
+  const geofence = evaluateGeofence(geo, job.latitude, job.longitude);
+
   return db.$transaction(async (tx) => {
     const now = new Date();
     const timeEntry = await tx.timeEntry.create({
@@ -39,6 +84,11 @@ export async function checkIn(actingUser: ActingUser, assignmentId: string) {
         status: "CHECKED_IN",
         checkInDeviceAt: now,
         checkInServerAt: now,
+        checkInLat: geo?.lat ?? null,
+        checkInLng: geo?.lng ?? null,
+        checkInAccuracy: geo?.accuracy ?? null,
+        geofenceRadiusMeters: geofence.radiusMeters,
+        geofenceResult: geofence.result,
       },
     });
 
@@ -54,6 +104,7 @@ export async function checkIn(actingUser: ActingUser, assignmentId: string) {
         action: "CHECK_IN",
         entityType: "TimeEntry",
         entityPublicId: timeEntry.id,
+        reason: `Geofence result: ${geofence.result}.`,
       },
     });
 
@@ -66,8 +117,9 @@ export async function checkIn(actingUser: ActingUser, assignmentId: string) {
 // contractor's staff must approve them (see approveTimeEntry below), per the
 // "approve hours" requirement in docs/PHASE1-DESIGN.md. Admins/dispatchers
 // are notified so the "hours awaiting approval" event from the notification
-// list is real from day one.
-export async function checkOut(actingUser: ActingUser, assignmentId: string) {
+// list is real from day one. Check-out location (if available) is recorded
+// alongside the existing check-in geofence result for a fuller audit trail.
+export async function checkOut(actingUser: ActingUser, assignmentId: string, geo?: GeoInput) {
   const assignment = await db.shiftAssignment.findUniqueOrThrow({
     where: { id: assignmentId },
     include: { timeEntry: true },
@@ -89,6 +141,8 @@ export async function checkOut(actingUser: ActingUser, assignmentId: string) {
         status: "PENDING_APPROVAL",
         checkOutDeviceAt: now,
         checkOutServerAt: now,
+        checkOutLat: geo?.lat ?? null,
+        checkOutLng: geo?.lng ?? null,
       },
     });
 
