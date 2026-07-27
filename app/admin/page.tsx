@@ -17,6 +17,7 @@ import {
 } from "./actions";
 import { listJobsForAdmin } from "@/lib/services/job.service";
 import { listOpenPositionsForAdmin, expireStaleOffers } from "@/lib/services/dispatch.service";
+import { runReminderSweep } from "@/lib/services/reminders.service";
 import { listTimeEntriesAwaitingApproval } from "@/lib/services/time.service";
 import {
   listContractorsWithUninvoicedApprovedHours,
@@ -49,6 +50,7 @@ export default async function AdminPage({
   }
 
   await expireStaleOffers();
+  await runReminderSweep();
   const [
     pendingContractorInterests,
     pendingJobRequests,
@@ -294,6 +296,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
+
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Hours awaiting approval</h2>
         <p className="text-sm text-slate-500">
@@ -368,6 +371,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
+
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
         {invoices.length === 0 ? (
@@ -606,6 +610,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
+
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-900">Applications to review</h2>
         {reviewApplications.length === 0 ? (
