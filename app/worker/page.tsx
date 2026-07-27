@@ -8,6 +8,7 @@ import {
   checkInAction,
   checkOutAction,
 } from "./actions";
+import { CheckInOutButton } from "./check-in-out-button";
 
 // Worker dashboard for Phase 1/2/3. Like the admin dashboard, this is
 // intentionally read-heavy for now - updating availability lands in a later
@@ -16,6 +17,13 @@ import {
 // canCheckInOutAssignment enforce that server-side, and being active here
 // never implies guaranteed hours.
 export const dynamic = "force-dynamic";
+
+const GEOFENCE_LABELS: Record<string, string> = {
+  WITHIN_RANGE: "Location verified on-site.",
+  OUT_OF_RANGE: "Check-in location was outside the expected jobsite radius.",
+  NO_JOB_LOCATION: "Jobsite location isn't on file yet, so location couldn't be verified.",
+  LOCATION_UNAVAILABLE: "Location wasn't available for this check-in.",
+};
 
 export default async function WorkerPage({
   searchParams,
@@ -157,19 +165,18 @@ export default async function WorkerPage({
                 <p className="mt-1 text-xs text-slate-500">Assignment status: {assignment.status.toLowerCase()}</p>
 
                 {!assignment.timeEntry ? (
-                  <form action={checkInAction} className="mt-3">
-                    <input type="hidden" name="assignmentId" value={assignment.id} />
-                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
-                      Check in
-                    </button>
-                  </form>
+                  <div className="mt-3">
+                    <CheckInOutButton assignmentId={assignment.id} mode="in" action={checkInAction} />
+                  </div>
                 ) : assignment.timeEntry.status === "CHECKED_IN" ? (
-                  <form action={checkOutAction} className="mt-3">
-                    <input type="hidden" name="assignmentId" value={assignment.id} />
-                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
-                      Check out
-                    </button>
-                  </form>
+                  <div className="mt-3 space-y-1">
+                    {assignment.timeEntry.geofenceResult ? (
+                      <p className="text-xs text-slate-500">
+                        {GEOFENCE_LABELS[assignment.timeEntry.geofenceResult] ?? ""}
+                      </p>
+                    ) : null}
+                    <CheckInOutButton assignmentId={assignment.id} mode="out" action={checkOutAction} />
+                  </div>
                 ) : assignment.timeEntry.status === "PENDING_APPROVAL" ? (
                   <p className="mt-3 text-xs font-medium text-amber-700">
                     Checked out - your hours are awaiting approval.
