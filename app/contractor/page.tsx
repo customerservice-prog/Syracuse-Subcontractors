@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
+import { StatusBadge } from "@/components/status-badge";
 import { submitJobRequestAction } from "./actions";
 import { listInvoicesForContractor } from "@/lib/services/invoice.service";
 
@@ -15,6 +16,15 @@ import { listInvoicesForContractor } from "@/lib/services/invoice.service";
 export const dynamic = "force-dynamic";
 
 const CONTRACTOR_STAFF_ROLES = ["CONTRACTOR_OWNER", "CONTRACTOR_MANAGER", "SUPERVISOR"];
+
+function SectionHeading({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="space-y-1 border-b border-slate-200 pb-3">
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    </div>
+  );
+}
 
 export default async function ContractorPage({
   searchParams,
@@ -58,7 +68,7 @@ export default async function ContractorPage({
         </div>
       ) : null}
 
-      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">New job request</h2>
         <form action={submitJobRequestAction} className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-slate-700">
@@ -107,7 +117,7 @@ export default async function ContractorPage({
           <div className="sm:col-span-2">
             <button
               type="submit"
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+              className="rounded-md bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-800"
             >
               Submit request
             </button>
@@ -116,18 +126,16 @@ export default async function ContractorPage({
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Your job requests</h2>
+        <SectionHeading title="Your job requests" />
         {jobRequests.length === 0 ? (
           <p className="text-sm text-slate-500">No job requests submitted yet.</p>
         ) : (
           <div className="space-y-3">
             {jobRequests.map((request) => (
-              <div key={request.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={request.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-slate-900">{request.jobType}</p>
-                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
-                    {request.status.replace("_", " ").toLowerCase()}
-                  </span>
+                  <StatusBadge status={request.status} />
                 </div>
                 <p className="mt-1 text-sm text-slate-600">
                   {request.requestedWorkerCount} worker(s) on {request.requestedDate.toISOString().slice(0, 10)},{" "}
@@ -141,22 +149,19 @@ export default async function ContractorPage({
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Your invoices</h2>
-        <p className="text-sm text-slate-500">
-          Invoices are generated from hours your on-site supervisor has approved. No payment is collected through
-          this platform yet - online payment is coming soon.
-        </p>
+        <SectionHeading
+          title="Your invoices"
+          description="Invoices are generated from hours your on-site supervisor has approved. No payment is collected through this platform yet - online payment is coming soon."
+        />
         {invoices.length === 0 ? (
           <p className="text-sm text-slate-500">No invoices yet.</p>
         ) : (
           <div className="space-y-3">
             {invoices.map((invoice) => (
-              <div key={invoice.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={invoice.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-slate-900">{invoice.invoiceNumber}</p>
-                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
-                    {invoice.status.replace("_", " ").toLowerCase()}
-                  </span>
+                  <StatusBadge status={invoice.status} />
                 </div>
                 <p className="mt-1 text-sm text-slate-600">Total due: ${invoice.total.toString()}</p>
                 <div className="mt-2 space-y-1">
