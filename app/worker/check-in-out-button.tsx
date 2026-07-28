@@ -51,7 +51,11 @@ export function CheckInOutButton({
       type="button"
       onClick={handleClick}
       disabled={isPending}
-      className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
+      className={
+        mode === "in"
+          ? "rounded-lg bg-brand-700 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-50"
+          : "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+      }
     >
       {isPending ? "Getting location..." : mode === "in" ? "Check in" : "Check out"}
     </button>
