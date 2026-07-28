@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
+import { StatusBadge } from "@/components/status-badge";
 import {
   approveContractorInterestAction,
   transitionApplicationAction,
@@ -45,6 +46,15 @@ const GEOFENCE_ADMIN_LABELS: Record<string, string> = {
   NO_JOB_LOCATION: "jobsite location not on file",
   LOCATION_UNAVAILABLE: "location unavailable",
 };
+
+function SectionHeading({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="space-y-1 border-b border-slate-200 pb-3">
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    </div>
+  );
+}
 
 export default async function AdminPage({
   searchParams,
@@ -103,7 +113,9 @@ export default async function AdminPage({
     <div className="space-y-10 py-8">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold text-slate-900">Admin dashboard</h1>
-        <p className="text-sm text-slate-600">Signed in as {actingUser.role.replace("_", " ").toLowerCase()}.</p>
+        <p className="text-sm text-slate-600">
+          Signed in as {actingUser.role.replace("_", " ").toLowerCase()}.
+        </p>
       </div>
 
       {searchParams.error ? (
@@ -113,31 +125,31 @@ export default async function AdminPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Active workers</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{activeWorkerCount}</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Approved contractors</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{activeContractorCount}</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Pending contractor interests</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{pendingContractorInterests.length}</p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Applications to review</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{reviewApplications.length}</p>
         </div>
       </div>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Pending contractor interests</h2>
+        <SectionHeading title="Pending contractor interests" />
         {pendingContractorInterests.length === 0 ? (
           <p className="text-sm text-slate-500">No pending contractor interests.</p>
         ) : (
           <div className="space-y-3">
             {pendingContractorInterests.map((interest) => (
-              <div key={interest.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={interest.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <p className="font-semibold text-slate-900">{interest.companyName}</p>
@@ -154,7 +166,7 @@ export default async function AdminPage({
                     <input type="hidden" name="inviteEmail" value={interest.contactEmail} />
                     <button
                       type="submit"
-                      className="whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                      className="whitespace-nowrap rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800"
                     >
                       Approve and invite
                     </button>
@@ -167,13 +179,13 @@ export default async function AdminPage({
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Pending job requests</h2>
+        <SectionHeading title="Pending job requests" />
         {pendingJobRequests.length === 0 ? (
           <p className="text-sm text-slate-500">No job requests awaiting review.</p>
         ) : (
           <div className="space-y-3">
             {pendingJobRequests.map((request) => (
-              <div key={request.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={request.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="font-semibold text-slate-900">
                   {request.contractor.companyName} - {request.jobType}
                 </p>
@@ -211,7 +223,7 @@ export default async function AdminPage({
                   />
                   <button
                     type="submit"
-                    className="whitespace-nowrap rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700"
+                    className="whitespace-nowrap rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800"
                   >
                     Create job &amp; shifts
                   </button>
@@ -222,18 +234,16 @@ export default async function AdminPage({
         )}
       </section>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Dispatch: open positions</h2>
-        <p className="text-sm text-slate-500">
-          Find eligible workers for an open position, then send an offer to one worker at a time - offers are never
-          blasted to every worker at once. If a worker declines or an offer expires, the next-ranked eligible
-          candidate is offered automatically.
-        </p>
+        <SectionHeading
+          title="Dispatch: open positions"
+          description="Find eligible workers for an open position, then send an offer to one worker at a time - offers are never blasted to every worker at once. If a worker declines or an offer expires, the next-ranked eligible candidate is offered automatically."
+        />
         {openPositions.length === 0 ? (
           <p className="text-sm text-slate-500">No open or offered positions right now.</p>
         ) : (
           <div className="space-y-3">
             {openPositions.map(({ position, latestRunGeneratedAt, topCandidates }) => (
-              <div key={position.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={position.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="font-semibold text-slate-900">
@@ -244,9 +254,7 @@ export default async function AdminPage({
                       {position.shift.endTime}
                     </p>
                   </div>
-                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
-                    {position.status.toLowerCase()}
-                  </span>
+                  <StatusBadge status={position.status} />
                 </div>
 
                 {position.requiredSkills.length > 0 ? (
@@ -287,7 +295,7 @@ export default async function AdminPage({
                           <form action={sendOfferAction}>
                             <input type="hidden" name="positionId" value={position.id} />
                             <input type="hidden" name="workerProfileId" value={candidate.workerProfileId} />
-                            <button className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700">
+                            <button className="rounded-md bg-brand-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-800">
                               Send offer
                             </button>
                           </form>
@@ -304,11 +312,10 @@ export default async function AdminPage({
         )}
       </section>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Hours awaiting approval</h2>
-        <p className="text-sm text-slate-500">
-          Workers have checked out of these shifts. Approve worked hours to mark the assignment complete and record
-          a positive reliability event; approving is never automatic.
-        </p>
+        <SectionHeading
+          title="Hours awaiting approval"
+          description="Workers have checked out of these shifts. Approve worked hours to mark the assignment complete and record a positive reliability event; approving is never automatic."
+        />
         {timeEntriesAwaitingApproval.length === 0 ? (
           <p className="text-sm text-slate-500">No hours are currently awaiting approval.</p>
         ) : (
@@ -317,7 +324,7 @@ export default async function AdminPage({
               const application = timeEntry.assignment.workerProfile.application;
               const job = timeEntry.assignment.position.shift.job;
               return (
-                <div key={timeEntry.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div key={timeEntry.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="font-semibold text-slate-900">
@@ -343,7 +350,7 @@ export default async function AdminPage({
                   ) : null}
                   <form action={approveTimeEntryAction} className="mt-3">
                     <input type="hidden" name="timeEntryId" value={timeEntry.id} />
-                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                    <button className="rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800">
                       Approve hours
                     </button>
                   </form>
@@ -353,13 +360,12 @@ export default async function AdminPage({
           </div>
         )}
       </section>
+
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Generate invoices</h2>
-        <p className="text-sm text-slate-500">
-          Contractors below have approved, not-yet-invoiced hours. Generating an invoice always produces a new
-          DRAFT - nothing is sent to the contractor and no payment is processed until you explicitly move it
-          forward.
-        </p>
+        <SectionHeading
+          title="Generate invoices"
+          description="Contractors below have approved, not-yet-invoiced hours. Generating an invoice always produces a new DRAFT - nothing is sent to the contractor and no payment is processed until you explicitly move it forward."
+        />
         {contractorsWithUninvoicedHours.length === 0 ? (
           <p className="text-sm text-slate-500">No contractors currently have approved hours awaiting invoicing.</p>
         ) : (
@@ -367,7 +373,7 @@ export default async function AdminPage({
             {contractorsWithUninvoicedHours.map((c) => (
               <div
                 key={c.contractorId}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-4"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               >
                 <p className="text-sm text-slate-700">
                   <span className="font-semibold text-slate-900">{c.companyName}</span> - {c.assignmentCount} approved
@@ -375,7 +381,7 @@ export default async function AdminPage({
                 </p>
                 <form action={generateInvoiceAction}>
                   <input type="hidden" name="contractorId" value={c.contractorId} />
-                  <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                  <button className="rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800">
                     Generate draft invoice
                   </button>
                 </form>
@@ -384,9 +390,8 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Invoices</h2>
+        <SectionHeading title="Invoices" />
         {invoices.length === 0 ? (
           <p className="text-sm text-slate-500">No invoices have been generated yet.</p>
         ) : (
@@ -394,7 +399,7 @@ export default async function AdminPage({
             {invoices.map((invoice) => {
               const nextStatuses = INVOICE_NEXT_STATUSES[invoice.status] ?? [];
               return (
-                <div key={invoice.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div key={invoice.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <p className="font-semibold text-slate-900">
@@ -402,9 +407,7 @@ export default async function AdminPage({
                       </p>
                       <p className="text-sm text-slate-600">Total: ${invoice.total.toString()}</p>
                     </div>
-                    <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
-                      {invoice.status.replace("_", " ").toLowerCase()}
-                    </span>
+                    <StatusBadge status={invoice.status} />
                   </div>
 
                   <div className="mt-2 space-y-1">
@@ -463,7 +466,7 @@ export default async function AdminPage({
         )}
       </section>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Active jobs</h2>
+        <SectionHeading title="Active jobs" />
         {jobs.length === 0 ? (
           <p className="text-sm text-slate-500">No jobs created yet.</p>
         ) : (
@@ -472,14 +475,12 @@ export default async function AdminPage({
               const positions = job.shifts.flatMap((shift) => shift.positions);
               const filledCount = positions.filter((p) => p.status === "FILLED").length;
               return (
-                <div key={job.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div key={job.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold text-slate-900">
                       {job.contractor.companyName} - {job.address}
                     </p>
-                    <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
-                      {job.status.replace("_", " ").toLowerCase()}
-                    </span>
+                    <StatusBadge status={job.status} />
                   </div>
                   <p className="mt-1 text-sm text-slate-600">
                     {filledCount} / {positions.length} position(s) filled across {job.shifts.length} shift(s)
@@ -492,11 +493,10 @@ export default async function AdminPage({
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Recent notifications</h2>
-        <p className="text-sm text-slate-500">
-          Every dispatch, hours, and invoice event creates a notification record with a full delivery history.
-          Email/SMS providers are mock (log-only) until real credentials are configured.
-        </p>
+        <SectionHeading
+          title="Recent notifications"
+          description="Every dispatch, hours, and invoice event creates a notification record with a full delivery history. Email/SMS providers are mock (log-only) until real credentials are configured."
+        />
         {recentNotifications.length === 0 ? (
           <p className="text-sm text-slate-500">No notifications recorded yet.</p>
         ) : (
@@ -504,7 +504,7 @@ export default async function AdminPage({
             {recentNotifications.map((event) => {
               const attempts = event.recipients.flatMap((r) => r.deliveryAttempts);
               return (
-                <div key={event.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <div key={event.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold text-slate-900">{event.type.replace(/_/g, " ")}</p>
                     <span className="text-xs text-slate-500">
@@ -515,11 +515,11 @@ export default async function AdminPage({
                     {event.entityType} - {event.recipients.length} recipient(s)
                   </p>
                   {attempts.length > 0 ? (
-                    <div className="mt-1 space-y-0.5">
+                    <div className="mt-2 flex flex-wrap gap-2">
                       {attempts.map((attempt) => (
-                        <p key={attempt.id} className="text-xs text-slate-500">
-                          {attempt.channel}: {attempt.status.toLowerCase()}
-                        </p>
+                        <span key={attempt.id} className="inline-flex items-center gap-1 text-xs text-slate-500">
+                          {attempt.channel}: <StatusBadge status={attempt.status} />
+                        </span>
                       ))}
                     </div>
                   ) : (
@@ -532,11 +532,10 @@ export default async function AdminPage({
         )}
       </section>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Crews</h2>
-        <p className="text-sm text-slate-500">
-          Crews are admin-managed in this MVP. Membership changes are tracked as history - removing a member ends
-          their membership rather than deleting the record.
-        </p>
+        <SectionHeading
+          title="Crews"
+          description="Crews are admin-managed in this MVP. Membership changes are tracked as history - removing a member ends their membership rather than deleting the record."
+        />
 
         <form action={createCrewAction} className="flex flex-wrap items-center gap-2">
           <input
@@ -545,7 +544,7 @@ export default async function AdminPage({
             placeholder="New crew name"
             className="rounded-md border border-slate-300 px-2 py-1.5 text-xs"
           />
-          <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+          <button className="rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800">
             Create crew
           </button>
         </form>
@@ -555,12 +554,10 @@ export default async function AdminPage({
         ) : (
           <div className="space-y-3">
             {crews.map((crew) => (
-              <div key={crew.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={crew.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold text-slate-900">{crew.name}</p>
-                  <span className="rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-600">
-                    {crew.status}
-                  </span>
+                  <StatusBadge status={crew.status} />
                 </div>
 
                 {crew.averageRating !== null ? (
@@ -624,18 +621,21 @@ export default async function AdminPage({
         )}
       </section>
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Applications to review</h2>
+        <SectionHeading title="Applications to review" />
         {reviewApplications.length === 0 ? (
           <p className="text-sm text-slate-500">No applications waiting on a decision.</p>
         ) : (
           <div className="space-y-3">
             {reviewApplications.map((application) => (
-              <div key={application.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={application.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <p className="font-semibold text-slate-900">
-                      {application.firstName} {application.lastName} - {application.status}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900">
+                        {application.firstName} {application.lastName}
+                      </p>
+                      <StatusBadge status={application.status} />
+                    </div>
                     <p className="text-sm text-slate-600">
                       {application.email} - {application.phone}
                     </p>
@@ -661,7 +661,7 @@ export default async function AdminPage({
                     <form action={transitionApplicationAction}>
                       <input type="hidden" name="applicationId" value={application.id} />
                       <input type="hidden" name="toStatus" value="APPROVED" />
-                      <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                      <button className="rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800">
                         Approve
                       </button>
                     </form>
