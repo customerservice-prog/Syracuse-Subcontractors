@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getActingUser } from "@/lib/auth/get-acting-user";
 import { getWorkerProfile } from "@/lib/services/worker.service";
+import { StatusBadge } from "@/components/status-badge";
 import {
   acceptOfferAction,
   declineOfferAction,
@@ -24,6 +25,15 @@ const GEOFENCE_LABELS: Record<string, string> = {
   NO_JOB_LOCATION: "Jobsite location isn't on file yet, so location couldn't be verified.",
   LOCATION_UNAVAILABLE: "Location wasn't available for this check-in.",
 };
+
+function SectionHeading({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="space-y-1 border-b border-slate-200 pb-3">
+      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+      {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    </div>
+  );
+}
 
 export default async function WorkerPage({
   searchParams,
@@ -71,12 +81,18 @@ export default async function WorkerPage({
 
   return (
     <div className="space-y-10 py-8">
-      <div className="space-y-1">
+      <div className="space-y-2">
         <h1 className="text-2xl font-semibold text-slate-900">Your worker dashboard</h1>
-        <p className="text-sm text-slate-600">
-          Status: <span className="font-medium">{workerProfile.status.replace("_", " ").toLowerCase()}</span>
-          {application ? ` - application ${application.status.replace("_", " ").toLowerCase()}` : ""}
-        </p>
+        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <span>Status:</span>
+          <StatusBadge status={workerProfile.status} />
+          {application ? (
+            <>
+              <span>- application:</span>
+              <StatusBadge status={application.status} />
+            </>
+          ) : null}
+        </div>
       </div>
 
       {searchParams.error ? (
@@ -91,7 +107,7 @@ export default async function WorkerPage({
       </div>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Your skills</h2>
+        <SectionHeading title="Your skills" />
         {workerProfile.skills.length === 0 ? (
           <p className="text-sm text-slate-500">No skills on file yet.</p>
         ) : (
@@ -99,7 +115,7 @@ export default async function WorkerPage({
             {workerProfile.skills.map((s) => (
               <span
                 key={s.id}
-                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700"
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-sm"
               >
                 {s.skill.name} - {s.level.replace("_", " ").toLowerCase()}
               </span>
@@ -109,13 +125,13 @@ export default async function WorkerPage({
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Pending offers</h2>
+        <SectionHeading title="Pending offers" />
         {pendingOffers.length === 0 ? (
           <p className="text-sm text-slate-500">No open offers right now.</p>
         ) : (
           <div className="space-y-3">
             {pendingOffers.map((offer) => (
-              <div key={offer.id} className="rounded-lg border border-slate-200 bg-white p-4">
+              <div key={offer.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <p className="font-semibold text-slate-900">
                   {offer.position.shift.job.contractor.companyName}
                 </p>
@@ -130,7 +146,7 @@ export default async function WorkerPage({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <form action={acceptOfferAction}>
                     <input type="hidden" name="offerId" value={offer.id} />
-                    <button className="rounded-md bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">
+                    <button className="rounded-md bg-brand-700 px-3 py-2 text-xs font-semibold text-white hover:bg-brand-800">
                       Accept
                     </button>
                   </form>
@@ -148,21 +164,23 @@ export default async function WorkerPage({
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-900">Upcoming shifts</h2>
+        <SectionHeading title="Upcoming shifts" />
         {upcomingAssignments.length === 0 ? (
           <p className="text-sm text-slate-500">No upcoming shifts scheduled.</p>
         ) : (
           <div className="space-y-3">
             {upcomingAssignments.map((assignment) => (
-              <div key={assignment.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                <p className="font-semibold text-slate-900">
-                  {assignment.position.shift.job.contractor.companyName}
-                </p>
+              <div key={assignment.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-900">
+                    {assignment.position.shift.job.contractor.companyName}
+                  </p>
+                  <StatusBadge status={assignment.status} />
+                </div>
                 <p className="text-sm text-slate-600">
                   {assignment.position.shift.shiftDate.toISOString().slice(0, 10)}, {assignment.position.shift.startTime}-
                   {assignment.position.shift.endTime} at {assignment.position.shift.job.address}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">Assignment status: {assignment.status.toLowerCase()}</p>
 
                 {!assignment.timeEntry ? (
                   <div className="mt-3">
