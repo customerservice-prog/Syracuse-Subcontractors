@@ -81,7 +81,7 @@ function toneClasses(status: string): string {
 function formatLabel(status: string): string {
   return status
     .split("_")
-    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
 }
 
