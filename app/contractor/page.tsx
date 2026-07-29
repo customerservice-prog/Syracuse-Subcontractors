@@ -17,11 +17,73 @@ export const dynamic = "force-dynamic";
 
 const CONTRACTOR_STAFF_ROLES = ["CONTRACTOR_OWNER", "CONTRACTOR_MANAGER", "SUPERVISOR"];
 
-function SectionHeading({ title, description }: { title: string; description?: string }) {
+const ICON_PATHS = {
+  clipboard:
+    "M9 4h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h1V5a1 1 0 0 1 1-1Zm0 0v2h6V4M9 12h6M9 16h6",
+  clock: "M12 8v4l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  invoice: "M8 3h8a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1Zm1 5h6M9 11h6M9 14h4",
+  plus: "M12 5v14M5 12h14",
+} satisfies Record<string, string>;
+
+function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof ICON_PATHS; className?: string }) {
   return (
-    <div className="space-y-1 border-b border-slate-200 pb-3">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-      {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={ICON_PATHS[name]} />
+    </svg>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description?: string;
+  icon?: keyof typeof ICON_PATHS;
+}) {
+  return (
+    <div className="flex items-start gap-3 border-b border-slate-200 pb-3">
+      {icon ? (
+        <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+          <Icon name={icon} className="h-4 w-4" />
+        </span>
+      ) : null}
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  icon: keyof typeof ICON_PATHS;
+  accent: "brand" | "amber" | "sky";
+}) {
+  const accentClasses: Record<string, string> = {
+    brand: "bg-brand-50 text-brand-700",
+    amber: "bg-amber-50 text-amber-700",
+    sky: "bg-sky-50 text-sky-700",
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg ${accentClasses[accent]}`}>
+          <Icon name={icon} className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="mt-0.5 text-2xl font-semibold text-slate-900">{value}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -48,6 +110,8 @@ export default async function ContractorPage({
     listInvoicesForContractor(contractorId),
   ]);
 
+  const pendingRequestCount = jobRequests.filter((r) => r.status === "SUBMITTED").length;
+
   return (
     <div className="space-y-10 py-8">
       <div className="space-y-1">
@@ -68,8 +132,19 @@ export default async function ContractorPage({
         </div>
       ) : null}
 
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Job requests submitted" value={jobRequests.length} icon="clipboard" accent="brand" />
+        <StatCard label="Pending review" value={pendingRequestCount} icon="clock" accent="amber" />
+        <StatCard label="Invoices" value={invoices.length} icon="invoice" accent="sky" />
+      </div>
+
       <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">New job request</h2>
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+            <Icon name="plus" className="h-4 w-4" />
+          </span>
+          <h2 className="text-lg font-semibold text-slate-900">New job request</h2>
+        </div>
         <form action={submitJobRequestAction} className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-sm text-slate-700">
             Type of work
@@ -126,7 +201,7 @@ export default async function ContractorPage({
       </section>
 
       <section className="space-y-4">
-        <SectionHeading title="Your job requests" />
+        <SectionHeading title="Your job requests" icon="clipboard" />
         {jobRequests.length === 0 ? (
           <p className="text-sm text-slate-500">No job requests submitted yet.</p>
         ) : (
@@ -152,6 +227,7 @@ export default async function ContractorPage({
         <SectionHeading
           title="Your invoices"
           description="Invoices are generated from hours your on-site supervisor has approved. No payment is collected through this platform yet - online payment is coming soon."
+          icon="invoice"
         />
         {invoices.length === 0 ? (
           <p className="text-sm text-slate-500">No invoices yet.</p>
