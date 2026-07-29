@@ -26,11 +26,70 @@ const GEOFENCE_LABELS: Record<string, string> = {
   LOCATION_UNAVAILABLE: "Location wasn't available for this check-in.",
 };
 
-function SectionHeading({ title, description }: { title: string; description?: string }) {
+const ICON_PATHS = {
+  star: "M12 3.5l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6-4.5-4.2 6.1-.7L12 3.5Z",
+  send: "M3 12 20 4l-7 17-3-7-7-2Z",
+  calendar: "M8 3v3M16 3v3M4 8h16M5 6h14a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Z",
+} satisfies Record<string, string>;
+
+function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof ICON_PATHS; className?: string }) {
   return (
-    <div className="space-y-1 border-b border-slate-200 pb-3">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-      {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={ICON_PATHS[name]} />
+    </svg>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description?: string;
+  icon?: keyof typeof ICON_PATHS;
+}) {
+  return (
+    <div className="flex items-start gap-3 border-b border-slate-200 pb-3">
+      {icon ? (
+        <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+          <Icon name={icon} className="h-4 w-4" />
+        </span>
+      ) : null}
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  icon: keyof typeof ICON_PATHS;
+  accent: "brand" | "amber";
+}) {
+  const accentClasses: Record<string, string> = {
+    brand: "bg-brand-50 text-brand-700",
+    amber: "bg-amber-50 text-amber-700",
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg ${accentClasses[accent]}`}>
+          <Icon name={icon} className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="mt-0.5 text-2xl font-semibold text-slate-900">{value}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -106,8 +165,13 @@ export default async function WorkerPage({
         guarantee hours - check back here for new offers.
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <StatCard label="Pending offers" value={pendingOffers.length} icon="send" accent="brand" />
+        <StatCard label="Upcoming shifts" value={upcomingAssignments.length} icon="calendar" accent="amber" />
+      </div>
+
       <section className="space-y-4">
-        <SectionHeading title="Your skills" />
+        <SectionHeading title="Your skills" icon="star" />
         {workerProfile.skills.length === 0 ? (
           <p className="text-sm text-slate-500">No skills on file yet.</p>
         ) : (
@@ -125,7 +189,7 @@ export default async function WorkerPage({
       </section>
 
       <section className="space-y-4">
-        <SectionHeading title="Pending offers" />
+        <SectionHeading title="Pending offers" icon="send" />
         {pendingOffers.length === 0 ? (
           <p className="text-sm text-slate-500">No open offers right now.</p>
         ) : (
@@ -164,7 +228,7 @@ export default async function WorkerPage({
       </section>
 
       <section className="space-y-4">
-        <SectionHeading title="Upcoming shifts" />
+        <SectionHeading title="Upcoming shifts" icon="calendar" />
         {upcomingAssignments.length === 0 ? (
           <p className="text-sm text-slate-500">No upcoming shifts scheduled.</p>
         ) : (
