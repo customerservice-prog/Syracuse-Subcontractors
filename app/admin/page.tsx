@@ -111,7 +111,7 @@ export default async function AdminPage({
 
   return (
     <div className="space-y-10 py-8">
-      <div className="space-y-1">
+      <div id="overview" className="scroll-mt-24 space-y-1">
         <h1 className="text-2xl font-semibold text-slate-900">Admin dashboard</h1>
         <p className="text-sm text-slate-600">
           Signed in as {actingUser.role.replace("_", " ").toLowerCase()}.
@@ -142,7 +142,7 @@ export default async function AdminPage({
           <p className="mt-1 text-2xl font-semibold text-slate-900">{reviewApplications.length}</p>
         </div>
       </div>
-      <section className="space-y-4">
+      <section id="interests" className="scroll-mt-24 space-y-4">
         <SectionHeading title="Pending contractor interests" />
         {pendingContractorInterests.length === 0 ? (
           <p className="text-sm text-slate-500">No pending contractor interests.</p>
@@ -178,7 +178,7 @@ export default async function AdminPage({
         )}
       </section>
 
-      <section className="space-y-4">
+      <section id="job-requests" className="scroll-mt-24 space-y-4">
         <SectionHeading title="Pending job requests" />
         {pendingJobRequests.length === 0 ? (
           <p className="text-sm text-slate-500">No job requests awaiting review.</p>
@@ -233,7 +233,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-      <section className="space-y-4">
+      <section id="dispatch" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Dispatch: open positions"
           description="Find eligible workers for an open position, then send an offer to one worker at a time - offers are never blasted to every worker at once. If a worker declines or an offer expires, the next-ranked eligible candidate is offered automatically."
@@ -311,7 +311,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-      <section className="space-y-4">
+      <section id="hours" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Hours awaiting approval"
           description="Workers have checked out of these shifts. Approve worked hours to mark the assignment complete and record a positive reliability event; approving is never automatic."
@@ -361,7 +361,7 @@ export default async function AdminPage({
         )}
       </section>
 
-      <section className="space-y-4">
+      <section id="invoices" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Generate invoices"
           description="Contractors below have approved, not-yet-invoiced hours. Generating an invoice always produces a new DRAFT - nothing is sent to the contractor and no payment is processed until you explicitly move it forward."
@@ -391,7 +391,7 @@ export default async function AdminPage({
         )}
       </section>
       <section className="space-y-4">
-        <SectionHeading title="Invoices" />
+        <SectionHeading title="All invoices" />
         {invoices.length === 0 ? (
           <p className="text-sm text-slate-500">No invoices have been generated yet.</p>
         ) : (
@@ -465,7 +465,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-      <section className="space-y-4">
+      <section id="jobs" className="scroll-mt-24 space-y-4">
         <SectionHeading title="Active jobs" />
         {jobs.length === 0 ? (
           <p className="text-sm text-slate-500">No jobs created yet.</p>
@@ -491,8 +491,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
-      <section className="space-y-4">
+      <section id="notifications" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Recent notifications"
           description="Every dispatch, hours, and invoice event creates a notification record with a full delivery history. Email/SMS providers are mock (log-only) until real credentials are configured."
@@ -531,7 +530,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-      <section className="space-y-4">
+      <section id="crews" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Crews"
           description="Crews are admin-managed in this MVP. Membership changes are tracked as history - removing a member ends their membership rather than deleting the record."
@@ -620,7 +619,7 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-      <section className="space-y-4">
+      <section id="applications" className="scroll-mt-24 space-y-4">
         <SectionHeading title="Applications to review" />
         {reviewApplications.length === 0 ? (
           <p className="text-sm text-slate-500">No applications waiting on a decision.</p>
