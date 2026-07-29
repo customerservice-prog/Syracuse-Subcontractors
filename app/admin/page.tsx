@@ -47,11 +47,83 @@ const GEOFENCE_ADMIN_LABELS: Record<string, string> = {
   LOCATION_UNAVAILABLE: "location unavailable",
 };
 
-function SectionHeading({ title, description }: { title: string; description?: string }) {
+const ICON_PATHS = {
+  building:
+    "M3 21h18M5 21V6a1 1 0 0 1 1-1h5v16M12 21V10a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v11M8 8h.01M8 12h.01M8 16h.01M16 12h.01M16 16h.01",
+  clipboard:
+    "M9 4h6a1 1 0 0 1 1 1v1h1a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h1V5a1 1 0 0 1 1-1Zm0 0v2h6V4M9 12h6M9 16h6",
+  send: "M3 12 20 4l-7 17-3-7-7-2Z",
+  clock: "M12 8v4l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  invoice: "M8 3h8a1 1 0 0 1 1 1v16l-3-2-2 2-2-2-3 2V4a1 1 0 0 1 1-1Zm1 5h6M9 11h6M9 14h4",
+  briefcase:
+    "M4 8h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm4 0V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18",
+  bell: "M12 3a3 3 0 0 0-3 3v1.2C7.2 8 6 9.9 6 12v3l-1.5 2.5h15L18 15v-3c0-2.1-1.2-4-3-4.8V6a3 3 0 0 0-3-3Zm-2 15a2 2 0 0 0 4 0",
+  users:
+    "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 20v-1a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v1m2 0v-1a4 4 0 0 0-3-3.87",
+  userPlus:
+    "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5 9v-1a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v1M18 8v6M15 11h6",
+} satisfies Record<string, string>;
+
+function Icon({ name, className = "h-4 w-4" }: { name: keyof typeof ICON_PATHS; className?: string }) {
   return (
-    <div className="space-y-1 border-b border-slate-200 pb-3">
-      <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-      {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={className}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={ICON_PATHS[name]} />
+    </svg>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+  icon,
+}: {
+  title: string;
+  description?: string;
+  icon?: keyof typeof ICON_PATHS;
+}) {
+  return (
+    <div className="flex items-start gap-3 border-b border-slate-200 pb-3">
+      {icon ? (
+        <span className="mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+          <Icon name={icon} className="h-4 w-4" />
+        </span>
+      ) : null}
+      <div className="space-y-1">
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        {description ? <p className="text-sm text-slate-500">{description}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+}: {
+  label: string;
+  value: number;
+  icon: keyof typeof ICON_PATHS;
+  accent: "brand" | "emerald" | "amber" | "sky";
+}) {
+  const accentClasses: Record<string, string> = {
+    brand: "bg-brand-50 text-brand-700",
+    emerald: "bg-emerald-50 text-emerald-700",
+    amber: "bg-amber-50 text-amber-700",
+    sky: "bg-sky-50 text-sky-700",
+  };
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-3">
+        <span className={`flex h-9 w-9 flex-none items-center justify-center rounded-lg ${accentClasses[accent]}`}>
+          <Icon name={icon} className="h-5 w-5" />
+        </span>
+        <div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="mt-0.5 text-2xl font-semibold text-slate-900">{value}</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -125,25 +197,18 @@ export default async function AdminPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Active workers</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{activeWorkerCount}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Approved contractors</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{activeContractorCount}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Pending contractor interests</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{pendingContractorInterests.length}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Applications to review</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{reviewApplications.length}</p>
-        </div>
+        <StatCard label="Active workers" value={activeWorkerCount} icon="users" accent="brand" />
+        <StatCard label="Approved contractors" value={activeContractorCount} icon="building" accent="emerald" />
+        <StatCard
+          label="Pending contractor interests"
+          value={pendingContractorInterests.length}
+          icon="clipboard"
+          accent="amber"
+        />
+        <StatCard label="Applications to review" value={reviewApplications.length} icon="userPlus" accent="sky" />
       </div>
       <section id="interests" className="scroll-mt-24 space-y-4">
-        <SectionHeading title="Pending contractor interests" />
+        <SectionHeading title="Pending contractor interests" icon="building" />
         {pendingContractorInterests.length === 0 ? (
           <p className="text-sm text-slate-500">No pending contractor interests.</p>
         ) : (
@@ -179,7 +244,7 @@ export default async function AdminPage({
       </section>
 
       <section id="job-requests" className="scroll-mt-24 space-y-4">
-        <SectionHeading title="Pending job requests" />
+        <SectionHeading title="Pending job requests" icon="clipboard" />
         {pendingJobRequests.length === 0 ? (
           <p className="text-sm text-slate-500">No job requests awaiting review.</p>
         ) : (
@@ -237,6 +302,7 @@ export default async function AdminPage({
         <SectionHeading
           title="Dispatch: open positions"
           description="Find eligible workers for an open position, then send an offer to one worker at a time - offers are never blasted to every worker at once. If a worker declines or an offer expires, the next-ranked eligible candidate is offered automatically."
+          icon="send"
         />
         {openPositions.length === 0 ? (
           <p className="text-sm text-slate-500">No open or offered positions right now.</p>
@@ -315,6 +381,7 @@ export default async function AdminPage({
         <SectionHeading
           title="Hours awaiting approval"
           description="Workers have checked out of these shifts. Approve worked hours to mark the assignment complete and record a positive reliability event; approving is never automatic."
+          icon="clock"
         />
         {timeEntriesAwaitingApproval.length === 0 ? (
           <p className="text-sm text-slate-500">No hours are currently awaiting approval.</p>
@@ -360,11 +427,11 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
       <section id="invoices" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Generate invoices"
           description="Contractors below have approved, not-yet-invoiced hours. Generating an invoice always produces a new DRAFT - nothing is sent to the contractor and no payment is processed until you explicitly move it forward."
+          icon="invoice"
         />
         {contractorsWithUninvoicedHours.length === 0 ? (
           <p className="text-sm text-slate-500">No contractors currently have approved hours awaiting invoicing.</p>
@@ -390,8 +457,9 @@ export default async function AdminPage({
           </div>
         )}
       </section>
+
       <section className="space-y-4">
-        <SectionHeading title="All invoices" />
+        <SectionHeading title="All invoices" icon="invoice" />
         {invoices.length === 0 ? (
           <p className="text-sm text-slate-500">No invoices have been generated yet.</p>
         ) : (
@@ -466,7 +534,7 @@ export default async function AdminPage({
         )}
       </section>
       <section id="jobs" className="scroll-mt-24 space-y-4">
-        <SectionHeading title="Active jobs" />
+        <SectionHeading title="Active jobs" icon="briefcase" />
         {jobs.length === 0 ? (
           <p className="text-sm text-slate-500">No jobs created yet.</p>
         ) : (
@@ -491,10 +559,12 @@ export default async function AdminPage({
           </div>
         )}
       </section>
+
       <section id="notifications" className="scroll-mt-24 space-y-4">
         <SectionHeading
           title="Recent notifications"
           description="Every dispatch, hours, and invoice event creates a notification record with a full delivery history. Email/SMS providers are mock (log-only) until real credentials are configured."
+          icon="bell"
         />
         {recentNotifications.length === 0 ? (
           <p className="text-sm text-slate-500">No notifications recorded yet.</p>
@@ -534,6 +604,7 @@ export default async function AdminPage({
         <SectionHeading
           title="Crews"
           description="Crews are admin-managed in this MVP. Membership changes are tracked as history - removing a member ends their membership rather than deleting the record."
+          icon="users"
         />
 
         <form action={createCrewAction} className="flex flex-wrap items-center gap-2">
@@ -620,7 +691,7 @@ export default async function AdminPage({
         )}
       </section>
       <section id="applications" className="scroll-mt-24 space-y-4">
-        <SectionHeading title="Applications to review" />
+        <SectionHeading title="Applications to review" icon="userPlus" />
         {reviewApplications.length === 0 ? (
           <p className="text-sm text-slate-500">No applications waiting on a decision.</p>
         ) : (
